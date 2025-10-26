@@ -128,12 +128,14 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
 
     PktData_t tlp_type = GET_TLP_TYPE(pkt->data);
 
+    // Process DLLPs
     if (pkt->seq == DLLP_SEQ_ID)
     {
         DebugVPrint("---> VUserInput_0 received DLLP\n");
         free(pkt->data);
         free(pkt);
     }
+    // Process completions
     else if (tlp_type == TL_CPL || tlp_type == TL_CPLD || tlp_type == TL_CPLLK || tlp_type == TL_CPLDLK)
     {
         DebugVPrint("---> InputCallback received TLP completion,  sequence %d of %d bytes\n", pkt->seq, pkt->ByteCount);
@@ -150,7 +152,7 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
                     (cpl_status == CPL_ABORT)       ? "ABORT"       :
                                                       "UNKNOWN", node);
         }
-        // If a successful completion with data, extract the TPL payload data and display
+        // If a successful completion with data, extract the TPL payload data
         else if (pkt->ByteCount)
         {
             // Get a pointer to the start of the payload data
@@ -180,6 +182,11 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
         // shared buffers.
         DISCARD_PACKET(pkt);
     }
+    // Process requests (mem, config space, i/o, message)
+    else
+    {
+        rx_tag = GET_TLP_TAG(pkt->data);
+    }
 }
 
 //-------------------------------------------------------------
@@ -199,7 +206,7 @@ void pcieVcInterface::run(void)
     unsigned   operation;
     unsigned   int_to_model;
     unsigned   option;
-    unsigned   pad_offset;
+    int        pad_offset;
 
     uint32_t   status;
     uint32_t   be;
@@ -266,14 +273,17 @@ void pcieVcInterface::run(void)
                 case GETLASTCMPLSTATUS :
                     VWrite(SETINTFROMMODEL, cpl_status, DELTACYCLE, node);
                     break;
+                case GETLASTRXREQTAG :
+                    VWrite(SETINTFROMMODEL, rx_tag, DELTACYCLE, node);
+                    break;
                 default:
                     VPrint("pcieVcInterface::run : ***ERROR. Unrecognised GET_MODEL_OPTIONS option (%d)\n", option);
                     error++;
                     break;
                 }
-                
+
                 break;
-                
+
             case SET_MODEL_OPTIONS :
                 VRead(GETOPTIONS,    &option,       DELTACYCLE, node);
                 VRead(GETINTTOMODEL, &int_to_model, DELTACYCLE, node);
@@ -307,15 +317,15 @@ void pcieVcInterface::run(void)
                     case SETTRANSMODE:
                         trans_mode = (pcie_trans_mode_t)int_to_model;
                         break;
-                        
+
                     case SETCMPLRID:
                         cmplrid = int_to_model;
                         break;
-                        
+
                     case SETCMPLCID:
                         cmplcid = int_to_model;
                         break;
-                        
+
                     case SETCMPLTAG:
                         cmpltag = int_to_model;
                         break;
@@ -338,10 +348,14 @@ void pcieVcInterface::run(void)
                 VRead64(GETDATATOMODEL, &wdata,      DELTACYCLE, node);
                 VRead64(GETDATAWIDTH,   &wdatawidth, DELTACYCLE, node);
 
-                // Place data into a PCIe model byte buffer
-                for (byteidx = 0; byteidx < wdatawidth/8; byteidx++)
+                // For completions, the data bytes will start at an offset into the first word, determined
+                // by the address low 2 bits
+                pad_offset = (trans_mode == CPL_TRANS) ? (address & 0x3) : 0;
+                
+                // Place data into a PCIe model byte buffer, padding beginning with 0s if needed
+                for (byteidx = -pad_offset; byteidx < int(wdatawidth/8); byteidx++)
                 {
-                    txdatabuf[byteidx] = (wdata >> (byteidx<<3)) & 0xff;
+                    txdatabuf[byteidx + pad_offset] = (byteidx < 0 ) ? 0 : ((wdata >> (byteidx<<3)) & 0xff);
                 }
 
                 switch(trans_mode)
@@ -405,7 +419,7 @@ void pcieVcInterface::run(void)
                     word_len = CalcWordCount(wdatawidth/8, be);
 
                     // Do a completion (posted, so nothing to wait for)
-                    pcie->completion(address, txdatabuf, status, (be >> 4) & 0xf, be & 0xf, word_len, cmpltag, cmplcid, cmplrid, false, digest_mode);
+                    pcie->completion(address & CMPL_ADDR_MASK, txdatabuf, status, be & 0xf, (be >> 4) & 0xf, word_len, cmpltag, cmplcid, cmplrid, false, digest_mode);
                     break;
 
                 default :
@@ -485,10 +499,17 @@ void pcieVcInterface::run(void)
                 // by the address low 2 bits
                 pad_offset = (trans_mode == CPL_TRANS) ? (address & 0x3) : 0;
 
-                for (int pidx = 0; pidx < wdatawidth; pidx++)
+                for (int pidx = -pad_offset; pidx < (int)wdatawidth; pidx++)
                 {
-                    VRead(POPDATA, &popdata, DELTACYCLE, node);
-                    txdatabuf[pidx + pad_offset] = popdata & 0xff;
+                    if (pidx < 0)
+                    {
+                        txdatabuf[pidx + pad_offset] = 0;
+                    }
+                    else
+                    {
+                      VRead(POPDATA, &popdata, DELTACYCLE, node);
+                      txdatabuf[pidx + pad_offset] = popdata & 0xff;
+                    }
                 }
 
                 switch(trans_mode)

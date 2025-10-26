@@ -154,6 +154,7 @@ public:
     static constexpr int   SETCMPLCID            = 1006;
     static constexpr int   SETCMPLTAG            = 1007;
     static constexpr int   GETLASTCMPLSTATUS     = 1008;
+    static constexpr int   GETLASTRXREQTAG       = 1009;
 
     static constexpr int   CMPL_ADDR_MASK        = 0x7c;
     static constexpr int   CMPL_STATUS_VOID      = 0xffff;
@@ -222,6 +223,7 @@ private:
     pPktData_t         rxdatabuf;
 
     PktData_t          cpl_status;
+    PktData_t          rx_tag;
 
 };
 

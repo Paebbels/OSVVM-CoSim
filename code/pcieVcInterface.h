@@ -36,6 +36,8 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <vector>
+#include <queue>
 
 #include "pcieModelClass.h"
 #include "OsvvmPcieAdapter.h"
@@ -153,11 +155,28 @@ public:
     static constexpr int   SETCMPLRID            = 1005;
     static constexpr int   SETCMPLCID            = 1006;
     static constexpr int   SETCMPLTAG            = 1007;
-    static constexpr int   GETLASTCMPLSTATUS     = 1008;
-    static constexpr int   GETLASTRXREQTAG       = 1009;
+    static constexpr int   SETREQTAG             = 1008;
+    static constexpr int   GETLASTCMPLSTATUS     = 1009;
+    static constexpr int   GETLASTRXREQTAG       = 1010;
 
     static constexpr int   CMPL_ADDR_MASK        = 0x7c;
     static constexpr int   CMPL_STATUS_VOID      = 0xffff;
+    
+    static constexpr int   TLP_TAG_AUTO          = 0x100;
+
+    // Single data buffer vector type
+    typedef std::vector<PktData_t> DataVec_t;
+    
+    // Receive data structure type
+    typedef  struct {
+        PktData_t cpl_status;
+        PktData_t tag;
+        PktData_t loaddr;
+        DataVec_t rxbuf;
+    } DataBuf_t;
+    
+    // Receive data queue type
+    typedef std::queue<DataBuf_t> DataBufQueue_t;
 
     typedef enum pcie_trans_mode_e
     {
@@ -174,23 +193,22 @@ public:
                     pcie        = new pcieModelClass(nodeIn);
 
                     // Default the internal state member variables
-                    reset_state = 0;
-                    link_width  = 0;
-                    rid         = node;
-                    pipe_mode   = PIPE_MODE_DISABLED;
-                    ep_mode     = EP_MODE_DISABLED;
-                    digest_mode = DIGEST_MODE_DISABLED;
+                    reset_state      = 0;
+                    link_width       = 0;
+                    rid              = node;
+                    pipe_mode        = PIPE_MODE_DISABLED;
+                    ep_mode          = EP_MODE_DISABLED;
+                    digest_mode      = DIGEST_MODE_DISABLED;
 
-                    trans_mode  = MEM_TRANS;
-                    rd_lck      = false;
-                    tag         = 0;
-                    cmplrid     = 0;
-                    cmplcid     = 0;
-                    cmpltag     = 0;
-                    cpl_status  = CMPL_STATUS_VOID;
+                    trans_mode       = MEM_TRANS;
+                    rd_lck           = false;
+                    tag              = 0;
+                    cmplrid          = 0;
+                    cmplcid          = 0;
+                    cmpltag          = 0;
+                    last_cpl_status  = CMPL_STATUS_VOID;
 
                     txdatabuf   = new PktData_t[databufsize];
-                    rxdatabuf   = new PktData_t[databufsize];
                 };
 
     void        run(void);
@@ -219,11 +237,11 @@ private:
     char               sbuf[strbufsize];
     pPktData_t         txdatabuf;
 
-    // Buffer for use by input callback
-    pPktData_t         rxdatabuf;
+    // Queue for RX buffers, for use by input callback
+    DataBufQueue_t     rxbufq;
 
-    PktData_t          cpl_status;
-    PktData_t          rx_tag;
+    PktData_t          last_cpl_status;
+    PktData_t          last_rx_tag;
 
 };
 

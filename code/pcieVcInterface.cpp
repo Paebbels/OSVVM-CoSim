@@ -105,8 +105,8 @@ static inline int CalcWordCount (const int byte_len, const int be)
 // VUserInput()
 //
 // Singleton re-entrant wrapper for pcieVcInterface object's
-// input callback function, with object instance passed in
-// with obj_instance.
+// input callback function, with object instance pointer passed
+// in with obj_instance.
 //
 //-------------------------------------------------------------
 
@@ -140,31 +140,39 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
     {
         DebugVPrint("---> InputCallback received TLP completion,  sequence %d of %d bytes\n", pkt->seq, pkt->ByteCount);
 
+        // Create a new entry in the queue for the completion
+        rxbufq.push(DataBuf_t());
+
         // Extract the completion status from the packet.
-        cpl_status = GET_CPL_STATUS(pkt->data);
+        rxbufq.back().cpl_status = GET_CPL_STATUS(pkt->data);
+        rxbufq.back().tag        = GET_CPL_TAG(pkt->data);
+        rxbufq.back().loaddr     = pkt->data[CPL_LOW_ADDR_OFFSET] & 0x7f;
 
         // Warn if a bad (non-zero) status
-        if (cpl_status != CPL_SUCCESS)
+        if (rxbufq.back().cpl_status != CPL_SUCCESS)
         {
             VPrint("**WARNING: InputCallback() received packet with status %s at node %d. Discarding.\n",
-                    (cpl_status == CPL_UNSUPPORTED) ? "UNSUPPORTED" :
-                    (cpl_status == CPL_CRS)         ? "CRS"         :
-                    (cpl_status == CPL_ABORT)       ? "ABORT"       :
-                                                      "UNKNOWN", node);
+                    (rxbufq.back().cpl_status == CPL_UNSUPPORTED) ? "UNSUPPORTED" :
+                    (rxbufq.back().cpl_status == CPL_CRS)         ? "CRS"         :
+                    (rxbufq.back().cpl_status == CPL_ABORT)       ? "ABORT"       :
+                                                                    "UNKNOWN", node);
         }
         // If a successful completion with data, extract the TPL payload data
         else if (pkt->ByteCount)
         {
+            // Size the buffer for the incoming data
+            rxbufq.back().rxbuf.resize(pkt->ByteCount);
+
             // Get a pointer to the start of the payload data
             pPktData_t payload = GET_TLP_PAYLOAD_PTR(pkt->data);
 
-            // Fetch data and put in receive buffer
+            // Fetch data and put in the receive buffer
             DebugVPrint("---> ");
             for (idx = 0; idx < pkt->ByteCount; idx++)
             {
-                rxdatabuf[idx] = payload[idx];
+                rxbufq.back().rxbuf[idx] = payload[idx];
 
-                DebugVPrint("%02x ", payload[idx]);
+                DebugVPrint("%02x ", rxbufq.back().rxbuf[idx]);
                 if ((idx % 16) == 15)
                 {
                     DebugVPrint("\n---> ");
@@ -185,7 +193,7 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
     // Process requests (mem, config space, i/o, message)
     else
     {
-        rx_tag = GET_TLP_TAG(pkt->data);
+        // TO DO
     }
 }
 
@@ -267,14 +275,15 @@ void pcieVcInterface::run(void)
         switch (operation)
         {
             case GET_MODEL_OPTIONS :
+
                 VRead(GETOPTIONS,    &option,       DELTACYCLE, node);
                 switch (option)
                 {
                 case GETLASTCMPLSTATUS :
-                    VWrite(SETINTFROMMODEL, cpl_status, DELTACYCLE, node);
+                    VWrite(SETINTFROMMODEL, last_cpl_status, DELTACYCLE, node);
                     break;
                 case GETLASTRXREQTAG :
-                    VWrite(SETINTFROMMODEL, rx_tag, DELTACYCLE, node);
+                    VWrite(SETINTFROMMODEL, last_rx_tag, DELTACYCLE, node);
                     break;
                 default:
                     VPrint("pcieVcInterface::run : ***ERROR. Unrecognised GET_MODEL_OPTIONS option (%d)\n", option);
@@ -285,6 +294,7 @@ void pcieVcInterface::run(void)
                 break;
 
             case SET_MODEL_OPTIONS :
+
                 VRead(GETOPTIONS,    &option,       DELTACYCLE, node);
                 VRead(GETINTTOMODEL, &int_to_model, DELTACYCLE, node);
 
@@ -334,6 +344,14 @@ void pcieVcInterface::run(void)
                         rd_lck = (bool)int_to_model;
                         break;
 
+                    case SETREQTAG:
+                        // Update the tag if it is the valid range
+                        if (int_to_model >= 0 && int_to_model < TLP_TAG_AUTO)
+                        {
+                            tag = int_to_model;
+                        }
+                        break;
+
                     default:
                         VPrint("pcieVcInterface::run : ***ERROR. Unrecognised SET_MODEL_OPTIONS option (%d)\n", option);
                         error++;
@@ -343,7 +361,7 @@ void pcieVcInterface::run(void)
 
             case WRITE_OP :
             case ASYNC_WRITE_ADDRESS :
-                cpl_status = CMPL_STATUS_VOID;
+
                 VRead64(GETADDRESS,     &address,    DELTACYCLE, node);
                 VRead64(GETDATATOMODEL, &wdata,      DELTACYCLE, node);
                 VRead64(GETDATAWIDTH,   &wdatawidth, DELTACYCLE, node);
@@ -351,7 +369,7 @@ void pcieVcInterface::run(void)
                 // For completions, the data bytes will start at an offset into the first word, determined
                 // by the address low 2 bits
                 pad_offset = (trans_mode == CPL_TRANS) ? (address & 0x3) : 0;
-                
+
                 // Place data into a PCIe model byte buffer, padding beginning with 0s if needed
                 for (byteidx = -pad_offset; byteidx < int(wdatawidth/8); byteidx++)
                 {
@@ -384,10 +402,13 @@ void pcieVcInterface::run(void)
                         // Non-posted transaction, so do a wait for the status completion
                         pcie->waitForCompletion();
 
+                        last_cpl_status = rxbufq.front().cpl_status;
+                        last_rx_tag     = rxbufq.front().tag;
+
                         // Flag any bad status
-                        if (cpl_status)
+                        if (rxbufq.front().cpl_status)
                         {
-                            VPrint("pcieVcInterface::run : ***ERROR. Received bad status (%d) on WRITE_OP\n", cpl_status);
+                            VPrint("pcieVcInterface::run : ***ERROR. Received bad status (%d) on WRITE_OP\n", rxbufq.front().cpl_status);
                             error++;
                         }
                     }
@@ -399,15 +420,19 @@ void pcieVcInterface::run(void)
                     break;
 
                 case IO_TRANS :
+
                     pcie->ioWrite(address, txdatabuf, wdatawidth/8, tag++, rid, false, digest_mode);
 
                     // Non-posted transaction, so do a wait for the status completion
                     pcie->waitForCompletion();
 
+                    last_cpl_status = rxbufq.front().cpl_status;
+                    last_rx_tag     = rxbufq.front().tag;
+
                     // Flag any bad status
-                    if (cpl_status)
+                    if (rxbufq.front().cpl_status)
                     {
-                        VPrint("pcieVcInterface::run : ***WARNING. Received bad status (%d) on WRITE_OP\n", cpl_status);
+                        VPrint("pcieVcInterface::run : ***WARNING. Received bad status (%d) on WRITE_OP\n", rxbufq.front().cpl_status);
                         //error++;
                     }
                     break;
@@ -428,70 +453,90 @@ void pcieVcInterface::run(void)
                     break;
                 }
 
+                // For non-posted transactions, pop the completion from the queue
+                //if (trans_mode != MEM_TRANS && trans_mode != MSG_TRANS/* && trans_mode != CPL_TRANS*/)
+                if (trans_mode == CFG_SPC_TRANS || trans_mode == IO_TRANS)
+                {
+                    rxbufq.pop();
+                }
                 break;
 
             case READ_OP :
-                cpl_status = CMPL_STATUS_VOID;
+            case READ_ADDRESS :
+            case READ_DATA :
+
                 VRead64(GETADDRESS,   &address,    DELTACYCLE, node);
                 VRead64(GETDATAWIDTH, &rdatawidth, DELTACYCLE, node);
 
-                switch(trans_mode)
+                if (operation != READ_DATA)
                 {
-                case MEM_TRANS :
-                    // Instigate a memory read
-                    pcie->memRead(address, rdatawidth/8, tag++, rid, false, digest_mode);
-                    break;
-
-                case CFG_SPC_TRANS :
-                    if (!ep_mode)
+                    switch(trans_mode)
                     {
+                    case MEM_TRANS :
+                        // Instigate a memory read
+                        pcie->memRead(address, rdatawidth/8, tag++, rid, false, digest_mode);
+                        break;
+
+                    case CFG_SPC_TRANS :
+                        if (!ep_mode)
+                        {
+                            // Instigate a configuration space read
+                            pcie->cfgRead(address, rdatawidth/8, tag++, rid, false, digest_mode);
+                        }
+                        else
+                        {
+                            VPrint("pcieVcInterface::run : ***ERROR. Issuing a configuration space read when an endpoint on READ_OP\n");
+                            error++;
+                        }
+                        break;
+
+                    case IO_TRANS :
                         // Instigate a configuration space read
-                        pcie->cfgRead(address, rdatawidth/8, tag++, rid, false, digest_mode);
+                        pcie->ioRead(address, rdatawidth/8, tag++, rid, false, digest_mode);
+                        break;
+
+                    default :
+                        VPrint("pcieVcInterface::run : ***ERROR. Unrecognised transaction mode on WRITE_OP (%d)\n", trans_mode);
+                        error++;
+                        break;
+                    }
+                }
+
+                if (operation != READ_ADDRESS)
+                {
+                    // Blocking read, so do a wait for the completion
+                    pcie->waitForCompletion();
+
+                    last_cpl_status = rxbufq.front().cpl_status;
+                    last_rx_tag     = rxbufq.front().tag;
+
+                    // If a successful completion returned, extract data
+                    if (!rxbufq.front().cpl_status)
+                    {
+                        // Get data
+                        addrlo = rxbufq.front().loaddr & 0x3ULL;
+                        for (rdata = 0, byteidx = 0; byteidx < (rdatawidth/8); byteidx++)
+                        {
+                            rdata |= (rxbufq.front().rxbuf[byteidx+addrlo] & 0xff) << (8 * byteidx);
+                        }
                     }
                     else
                     {
-                        VPrint("pcieVcInterface::run : ***ERROR. Issuing a configuration space read when an endpoint on READ_OP\n");
-                        error++;
+                        rdata = 0;
+                        VWrite(SETBOOLFROMMODEL, 1, DELTACYCLE, node);
                     }
-                    break;
 
-                case IO_TRANS :
-                    // Instigate a configuration space read
-                    pcie->ioRead(address, rdatawidth/8, tag++, rid, false, digest_mode);
-                    break;
+                    // Pop the received packet from the queue
+                    rxbufq.pop();
 
-                default :
-                    VPrint("pcieVcInterface::run : ***ERROR. Unrecognised transaction mode on WRITE_OP (%d)\n", trans_mode);
-                    error++;
-                    break;
+                    // Update transaction record return data
+                    VWrite64(SETDATAFROMMODEL, rdata, DELTACYCLE, node);
                 }
-
-                // Blocking read, so do a wait for the completion
-                pcie->waitForCompletion();
-
-                // If a successful completion returned, extract data
-                if (!cpl_status)
-                {
-                    // Get data
-                    addrlo = address & 0x3ULL;
-                    for (rdata = 0, byteidx = 0; byteidx < (rdatawidth/8); byteidx++)
-                    {
-                        rdata |= (rxdatabuf[byteidx+addrlo] & 0xff) << (8 * byteidx);
-                    }
-                }
-                else
-                {
-                    rdata = 0;
-                    VWrite(SETBOOLFROMMODEL, 1, DELTACYCLE, node);
-                }
-
-                // Update transaction record return data
-                VWrite64(SETDATAFROMMODEL, rdata, DELTACYCLE, node);
 
                 break;
 
             case WRITE_BURST :
-                cpl_status = CMPL_STATUS_VOID;
+
                 VRead64(GETADDRESS,     &address,    DELTACYCLE, node);
                 VRead64(GETDATAWIDTH,   &wdatawidth, DELTACYCLE, node);
 
@@ -515,10 +560,12 @@ void pcieVcInterface::run(void)
                 switch(trans_mode)
                 {
                 case MEM_TRANS :
+
                     pcie->memWrite(address, txdatabuf, wdatawidth, tag++, rid, false, digest_mode);
                     break;
 
                 case CPL_TRANS :
+
                     status   = CPL_SUCCESS;
                     be       = CalcBe(address, wdatawidth);
                     word_len = CalcWordCount(wdatawidth, be);
@@ -535,7 +582,7 @@ void pcieVcInterface::run(void)
                 break;
 
             case READ_BURST :
-                cpl_status = CMPL_STATUS_VOID;
+
                 VRead64(GETADDRESS,     &address,    DELTACYCLE, node);
                 VRead64(GETDATAWIDTH,   &rdatawidth, DELTACYCLE, node);
 
@@ -544,15 +591,19 @@ void pcieVcInterface::run(void)
                 // Blocking read, so do a wait for the completion
                 pcie->waitForCompletion();
 
+                last_cpl_status = rxbufq.front().cpl_status;
+                last_rx_tag     = rxbufq.front().tag;
+
                 // If a successful completion returned, extract data
-                if (!cpl_status)
+                if (!rxbufq.front().cpl_status)
                 {
                     // Get data
-                    addrlo = address & 0x3ULL;
+                    addrlo = rxbufq.front().loaddr & 0x3ULL;
                     for (byteidx = 0; byteidx < rdatawidth; byteidx++)
                     {
-                        VWrite(PUSHDATA, rxdatabuf[byteidx+addrlo], DELTACYCLE, node);
+                        VWrite(PUSHDATA, rxbufq.front().rxbuf[byteidx+addrlo], DELTACYCLE, node);
                     }
+                    rxbufq.pop();
                 }
                 else
                 {
@@ -563,12 +614,14 @@ void pcieVcInterface::run(void)
                 break;
 
             case WAIT_FOR_CLOCK :
+
                 VRead(GETINTTOMODEL, &int_to_model, DELTACYCLE, node);
                 pcie->sendIdle(int_to_model);
                 break;
 
-            case SET_BURST_MODE:
-                VPrint("===> SET_BURST_MODE");
+            case WAIT_FOR_TRANSACTION:
+
+                pcie->waitForCompletion();
                 break;
 
             default :

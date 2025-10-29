@@ -462,13 +462,15 @@ void pcieVcInterface::run(void)
                 break;
 
             case READ_OP :
+            case ASYNC_READ_ADDRESS :
             case READ_ADDRESS :
             case READ_DATA :
+            case ASYNC_READ_DATA :
 
                 VRead64(GETADDRESS,   &address,    DELTACYCLE, node);
                 VRead64(GETDATAWIDTH, &rdatawidth, DELTACYCLE, node);
 
-                if (operation != READ_DATA)
+                if (operation != READ_DATA && operation != ASYNC_READ_DATA)
                 {
                     switch(trans_mode)
                     {
@@ -502,7 +504,7 @@ void pcieVcInterface::run(void)
                     }
                 }
 
-                if (operation != READ_ADDRESS)
+                if (operation != READ_ADDRESS && operation != ASYNC_READ_ADDRESS)
                 {
                     // Blocking read, so do a wait for the completion
                     pcie->waitForCompletion();
@@ -635,8 +637,8 @@ void pcieVcInterface::run(void)
     {
         VPrint("***Error: pcieVcInterface::run() had an error\n");
 
-        // Halt the simulation with a fatal error
-        VWrite(PVH_FATAL, 0, 0, node);
+        // Send the simulation with an error
+        VWrite(PVH_FATAL, error, 0, node);
     }
     else if (end)
     {

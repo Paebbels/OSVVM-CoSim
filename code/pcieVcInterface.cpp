@@ -225,6 +225,7 @@ void pcieVcInterface::run(void)
     uint64_t   wdatawidth;
     uint64_t   rdatawidth;
     uint64_t   word_len;
+    uint64_t   remaining_len;
     uint64_t   address;
     uint64_t   addrlo;
 
@@ -335,6 +336,10 @@ void pcieVcInterface::run(void)
                     case SETCMPLCID:
                         cmplcid = int_to_model;
                         break;
+                        
+                    case SETCMPLRLEN:
+                        cmplrlen = int_to_model;
+                        break;
 
                     case SETCMPLTAG:
                         cmpltag = int_to_model;
@@ -438,13 +443,15 @@ void pcieVcInterface::run(void)
                     break;
 
                 case CPL_TRANS :
+                case PART_CPL_TRANS :
 
-                    status   = CPL_SUCCESS;
-                    be       = CalcBe(address, wdatawidth/8);
-                    word_len = CalcWordCount(wdatawidth/8, be);
+                    status        = CPL_SUCCESS;
+                    be            = CalcBe(address, wdatawidth/8);
+                    word_len      = CalcWordCount(wdatawidth/8, be);
+                    remaining_len = (trans_mode == CPL_TRANS) ? word_len : cmplrlen;
 
-                    // Do a completion (posted, so nothing to wait for)
-                    pcie->completion(address & CMPL_ADDR_MASK, txdatabuf, status, be & 0xf, (be >> 4) & 0xf, word_len, cmpltag, cmplcid, cmplrid, false, digest_mode);
+                    // Do a completion (effectively posted, so nothing to wait for)
+                    pcie->partCompletionDelay(address & CMPL_ADDR_MASK, txdatabuf, status, be & 0xf, (be >> 4) & 0xf, remaining_len, word_len, cmpltag, cmplcid, cmplrid, false, false, digest_mode);
                     break;
 
                 default :
@@ -544,7 +551,7 @@ void pcieVcInterface::run(void)
 
                 // For completions, the data bytes will start at an offset into the first word, determined
                 // by the address low 2 bits
-                pad_offset = (trans_mode == CPL_TRANS) ? (address & 0x3) : 0;
+                pad_offset = (trans_mode == CPL_TRANS || trans_mode == PART_CPL_TRANS) ? (address & 0x3) : 0;
 
                 for (int pidx = -pad_offset; pidx < (int)wdatawidth; pidx++)
                 {
@@ -567,14 +574,16 @@ void pcieVcInterface::run(void)
                     break;
 
                 case CPL_TRANS :
+                case PART_CPL_TRANS :
 
-                    status   = CPL_SUCCESS;
-                    be       = CalcBe(address, wdatawidth);
-                    word_len = CalcWordCount(wdatawidth, be);
+                    status        = CPL_SUCCESS;
+                    be            = CalcBe(address, wdatawidth);
+                    word_len      = CalcWordCount(wdatawidth, be);
+                    remaining_len = (trans_mode == CPL_TRANS) ? word_len : cmplrlen;
 
-                    // Do a completion (posted, so nothing to wait for). Align the address to a word
+                    // Do a completion (effectively posted, so nothing to wait for). Align the address to a word
                     // boundary and only use the needed lower 7 bits.
-                    pcie->partCompletionDelay(address & CMPL_ADDR_MASK, txdatabuf, status, be & 0xf, (be >> 4) & 0xf, word_len, word_len, cmpltag, cmplcid, cmplrid, false, false, digest_mode);
+                    pcie->partCompletionDelay(address & CMPL_ADDR_MASK, txdatabuf, status, be & 0xf, (be >> 4) & 0xf, remaining_len, word_len, cmpltag, cmplcid, cmplrid, false, false, digest_mode);
                     break;
 
                 default:

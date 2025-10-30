@@ -154,10 +154,11 @@ public:
     static constexpr int   SETRDLCK              = 1004;
     static constexpr int   SETCMPLRID            = 1005;
     static constexpr int   SETCMPLCID            = 1006;
-    static constexpr int   SETCMPLTAG            = 1007;
-    static constexpr int   SETREQTAG             = 1008;
-    static constexpr int   GETLASTCMPLSTATUS     = 1009;
-    static constexpr int   GETLASTRXREQTAG       = 1010;
+    static constexpr int   SETCMPLRLEN           = 1007;
+    static constexpr int   SETCMPLTAG            = 1008;
+    static constexpr int   SETREQTAG             = 1009;
+    static constexpr int   GETLASTCMPLSTATUS     = 1010;
+    static constexpr int   GETLASTRXREQTAG       = 1011;
 
     static constexpr int   CMPL_ADDR_MASK        = 0x7c;
     static constexpr int   CMPL_STATUS_VOID      = 0xffff;
@@ -184,7 +185,8 @@ public:
         IO_TRANS,
         CFG_SPC_TRANS,
         MSG_TRANS,
-        CPL_TRANS
+        CPL_TRANS,
+        PART_CPL_TRANS
     } pcie_trans_mode_t;
 
                 pcieVcInterface (const unsigned nodeIn) : node (nodeIn)
@@ -206,6 +208,7 @@ public:
                     cmplrid          = 0;
                     cmplcid          = 0;
                     cmpltag          = 0;
+                    cmplrlen         = 0;
                     last_cpl_status  = CMPL_STATUS_VOID;
 
                     txdatabuf   = new PktData_t[databufsize];
@@ -233,7 +236,7 @@ private:
     unsigned           cmplrid;
     unsigned           cmplcid;
     unsigned           cmpltag;
-
+    unsigned           cmplrlen;
     char               sbuf[strbufsize];
     pPktData_t         txdatabuf;
 

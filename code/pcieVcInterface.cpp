@@ -336,7 +336,7 @@ void pcieVcInterface::run(void)
                     case SETCMPLCID:
                         cmplcid = int_to_model;
                         break;
-                        
+
                     case SETCMPLRLEN:
                         cmplrlen = int_to_model;
                         break;
@@ -451,7 +451,8 @@ void pcieVcInterface::run(void)
                     remaining_len = (trans_mode == CPL_TRANS) ? word_len : cmplrlen;
 
                     // Do a completion (effectively posted, so nothing to wait for)
-                    pcie->partCompletionDelay(address & CMPL_ADDR_MASK, txdatabuf, status, be & 0xf, (be >> 4) & 0xf, remaining_len, word_len, cmpltag, cmplcid, cmplrid, false, false, digest_mode);
+                    pcie->partCompletionLockDelay(address & CMPL_ADDR_MASK, txdatabuf, status, be & 0xf, (be >> 4) & 0xf, remaining_len, word_len,
+                                                  cmpltag, cmplcid, cmplrid, rd_lck, digest_mode, false, false);
                     break;
 
                 default :
@@ -483,7 +484,7 @@ void pcieVcInterface::run(void)
                     {
                     case MEM_TRANS :
                         // Instigate a memory read
-                        pcie->memRead(address, rdatawidth/8, tag++, rid, false, digest_mode);
+                        pcie->memReadLockDigest(address, rdatawidth/8, tag++, rid, rd_lck, digest_mode, false);
                         break;
 
                     case CFG_SPC_TRANS :
@@ -583,7 +584,8 @@ void pcieVcInterface::run(void)
 
                     // Do a completion (effectively posted, so nothing to wait for). Align the address to a word
                     // boundary and only use the needed lower 7 bits.
-                    pcie->partCompletionDelay(address & CMPL_ADDR_MASK, txdatabuf, status, be & 0xf, (be >> 4) & 0xf, remaining_len, word_len, cmpltag, cmplcid, cmplrid, false, false, digest_mode);
+                    pcie->partCompletionLockDelay(address & CMPL_ADDR_MASK, txdatabuf, status, be & 0xf, (be >> 4) & 0xf, remaining_len, word_len, cmpltag, cmplcid, cmplrid,
+                                                  rd_lck, digest_mode, false, false);
                     break;
 
                 default:
@@ -597,7 +599,7 @@ void pcieVcInterface::run(void)
                 VRead64(GETADDRESS,     &address,    DELTACYCLE, node);
                 VRead64(GETDATAWIDTH,   &rdatawidth, DELTACYCLE, node);
 
-                pcie->memRead(address, rdatawidth, tag++, rid, false, digest_mode);
+                pcie->memReadLockDigest(address, rdatawidth, tag++, rid, rd_lck, digest_mode, false);
 
                 // Blocking read, so do a wait for the completion
                 pcie->waitForCompletion();

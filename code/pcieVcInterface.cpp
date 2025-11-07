@@ -356,6 +356,24 @@ void pcieVcInterface::run(void)
                             tag = int_to_model;
                         }
                         break;
+                        
+                    case SETCFGSPCOFFSET:
+                        cfgspc_offset = int_to_model;
+                        break;
+                        
+                    case SETCFGSPC:
+                        if (ep_mode)
+                        {
+                            pcie->writeConfigSpace(cfgspc_offset, int_to_model);
+                        }
+                        break;
+                        
+                    case SETCFGSPCMASK:
+                        if (ep_mode)
+                        {
+                            pcie->writeConfigSpaceMask(cfgspc_offset, int_to_model);
+                        }
+                        break; 
 
                     default:
                         VPrint("pcieVcInterface::run : ***ERROR. Unrecognised SET_MODEL_OPTIONS option (%d)\n", option);

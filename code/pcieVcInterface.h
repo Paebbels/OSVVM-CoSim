@@ -157,8 +157,13 @@ public:
     static constexpr int   SETCMPLRLEN           = 1007;
     static constexpr int   SETCMPLTAG            = 1008;
     static constexpr int   SETREQTAG             = 1009;
-    static constexpr int   GETLASTCMPLSTATUS     = 1010;
-    static constexpr int   GETLASTRXREQTAG       = 1011;
+    static constexpr int   SETCFGSPC             = 1010;
+    static constexpr int   SETCFGSPCMASK         = 1011;
+    static constexpr int   SETCFGSPCOFFSET       = 1012;
+    
+    
+    static constexpr int   GETLASTCMPLSTATUS     = 2000;
+    static constexpr int   GETLASTRXREQTAG       = 2001;
 
     static constexpr int   CMPL_ADDR_MASK        = 0x7c;
     static constexpr int   CMPL_STATUS_VOID      = 0xffff;
@@ -209,6 +214,7 @@ public:
                     cmplcid          = 0;
                     cmpltag          = 0;
                     cmplrlen         = 0;
+                    cfgspc_offset    = 0;
                     last_cpl_status  = CMPL_STATUS_VOID;
 
                     txdatabuf   = new PktData_t[databufsize];
@@ -237,6 +243,7 @@ private:
     unsigned           cmplcid;
     unsigned           cmpltag;
     unsigned           cmplrlen;
+    unsigned           cfgspc_offset;
     char               sbuf[strbufsize];
     pPktData_t         txdatabuf;
 

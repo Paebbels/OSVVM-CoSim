@@ -1,6 +1,6 @@
 // =========================================================================
 //
-//  File Name:         pcieVcInterface.h
+//  File Name:         pcieVcInterface.cpp
 //  Design Unit Name:
 //  Revision:          OSVVM MODELS STANDARD VERSION
 //
@@ -219,6 +219,7 @@ void pcieVcInterface::run(void)
     uint32_t   status;
     uint32_t   be;
     uint32_t   popdata;
+    uint32_t   memword;
 
     uint64_t   rdata;
     uint64_t   wdata;
@@ -232,7 +233,7 @@ void pcieVcInterface::run(void)
     // Initialise PCIe VHost, with input callback function and no user pointer.
     pcie->initialisePcie(VUserInput, this);
 
-    pcie->getPcieVersionStr(sbuf, strbufsize);
+    pcie->getPcieVersionStr(sbuf, STRBUFSIZE);
     VPrint("  %s\n", sbuf);
 
     DebugVPrint("pcieVcInterface::run: on node %d\n", node);
@@ -285,6 +286,11 @@ void pcieVcInterface::run(void)
                     break;
                 case GETLASTRXREQTAG :
                     VWrite(SETINTFROMMODEL, last_rx_tag, DELTACYCLE, node);
+                    break;
+                case GETMEMDATA:
+                    memword = pcie->readRamWord(mem_addr);
+                    mem_addr += 4;
+                    VWrite(SETINTFROMMODEL, memword, DELTACYCLE, node);
                     break;
                 default:
                     VPrint("pcieVcInterface::run : ***ERROR. Unrecognised GET_MODEL_OPTIONS option (%d)\n", option);
@@ -374,6 +380,19 @@ void pcieVcInterface::run(void)
                             pcie->writeConfigSpaceMask(cfgspc_offset, int_to_model);
                         }
                         break; 
+
+                    case SETMEMADDRLO:
+                        mem_addr = (mem_addr & ~0xffffffffULL) | (uint64_t)((uint32_t)int_to_model & ~0xfffffffc);
+                        break;
+               
+                    case SETMEMADDRHI:
+                        mem_addr = (mem_addr &  0xffffffffULL) | ((uint64_t)((uint32_t)int_to_model) << 32);
+                        break;    
+                    
+                    case SETMEMDATA:
+                        pcie->writeRamWord(mem_addr, (uint32_t)int_to_model);
+                        mem_addr += 4;
+                        break;                         
 
                     default:
                         VPrint("pcieVcInterface::run : ***ERROR. Unrecognised SET_MODEL_OPTIONS option (%d)\n", option);
@@ -686,5 +705,254 @@ void pcieVcInterface::run(void)
     while (true)
     {
         pcie->sendIdle(10000);
+    }
+}
+
+//-------------------------------------------------------------
+// runAutoEp()
+//
+// Program for automatic EP model
+//
+//-------------------------------------------------------------
+void pcieVcInterface::runAutoEp()
+{
+    unsigned reset_state = 0;
+
+    // Create an API object for this node
+    pcieModelClass* pcie = new pcieModelClass(node);
+
+    // Initialise PCIe VHost, with input callback function and no user pointer.
+    pcie->initialisePcie(VUserInputAutoEp, &node);
+
+    unsigned pipe_mode, link_width, init_phy;
+
+    // Fetch configuration status
+    VRead(PIPE_ADDR,    &pipe_mode,  pcieVcInterface::DELTACYCLE, node);
+    VRead(LANESADDR,    &link_width, pcieVcInterface::DELTACYCLE, node);
+    VRead(INITPHY_ADDR, &init_phy,   pcieVcInterface::DELTACYCLE, node);
+
+    // Set model into PIPE mode, if requested
+    if (pipe_mode)
+    {
+        pcie->configurePcie(CONFIG_DISABLE_SCRAMBLING);
+        pcie->configurePcie(CONFIG_DISABLE_8B10B);
+    }
+
+    // Make sure the link is out of electrical idle
+    VWrite(LINK_STATE, 0, 0, node);
+
+    // Use node number as seed
+    pcie->pcieSeed(node);
+
+    // Construct an endpoint PCIe configuration space setting
+    ConfigureType0PcieCfg(pcie);
+
+    // Wait until reset is inactivated
+    do
+    {
+        pcie->sendIdle();
+        VRead(RESET_STATE, &reset_state, 0, node);
+    } while(reset_state);
+
+
+    // If configured to so do, initialise the PHY link for given number of lanes
+    if (init_phy)
+    {
+        InitLink(link_width, node);
+    }
+
+    // Initialise DLL flow control
+    pcie->initFc();
+
+    // Send out idles forever
+    while (true)
+    {
+        pcie->sendIdle(10000);
+    }
+}
+
+//-------------------------------------------------------------
+// VUserInputAutoEp()
+//
+// Consumes the unhandled input Packets and display a message
+//
+//-------------------------------------------------------------
+
+void pcieVcInterface::VUserInputAutoEp(pPkt_t pkt, int status, void* usrptr)
+{
+    int node = *((int*)usrptr);
+    
+    if (pkt->seq == DLLP_SEQ_ID)
+    {
+        DebugVPrint("---> VUserInputAutoEp received DLLP\n");
+    }
+    else
+    {
+        // Get transaction type
+        PktData_t type = GET_TLP_TYPE(pkt->data);
+
+        // Get transaction length if a payload type, else set to 0
+        int length  = (type & 0x40) ? (GET_TLP_LENGTH(pkt->data)) : 0;
+
+        VPrint("===> VUserInputAutoEp @node%d received %s TLP sequence %d with payload length %d words at cycle %d\n", node,
+                     (type & ~0x21) == TL_MRD32  ? "mem read"           :
+                     (type & ~0x20) == TL_MWR32  ? "mem_write"          :
+                     type           == TL_IORD   ? "i/o read"           :
+                     type           == TL_IOWR   ? "i/o write"          :
+                     (type & ~0x01) == TL_CFGRD0 ? "config space read"  :
+                     (type & ~0x01) == TL_CFGWR0 ? "config space write" :
+                     (type & ~0x07) == TL_MSG    ? "message"            :
+                     (type & ~0x07) == TL_MSGD   ? "message with data"  :
+                     (type & ~0x41) == TL_CPL    ? "completion"         :
+                                                   "unknown",
+                     pkt->seq, length, pkt->TimeStamp);
+    }
+
+    // Once packet is finished with, the allocated space *must* be freed.
+    // All input packets have their own memory space to avoid overwrites
+    // which shared buffers.
+    DISCARD_PACKET(pkt);
+}
+
+//-------------------------------------------------------------
+// ConfigureType0PcieCfg()
+//
+// Configure the configuration space buffer for an endpoint
+// (type 0) PCIe configuration space with PCI compatible header,
+// PCIe capabilities, MSI capabilities and Power management
+// capabilities, along with some default values.
+//
+//-------------------------------------------------------------
+
+void pcieVcInterface::ConfigureType0PcieCfg (pcieModelClass* pcie)
+{
+    unsigned        next_cap_ptr = 0;
+
+    // -------------------------------------
+    // PPCI compatible header
+    // -------------------------------------
+
+    cfg_spc_type0_t     type0;
+    cfg_spc_type0_t     type0_mask;
+    cfg_spc_pcie_caps_t pcie_caps;
+    cfg_spc_pcie_caps_t pcie_caps_mask;
+    cfg_spc_msi_caps_t  msi_caps;
+    cfg_spc_msi_caps_t  msi_caps_mask;
+    pwr_mgmnt_caps_t    pwr_mgmnt_caps;
+    pwr_mgmnt_caps_t    pwr_mgmnt_caps_mask;
+
+    // Default to all zeros and read-only
+    for (int idx = 0; idx < (CFG_PCI_HDR_SIZE_BYTES/4); idx++)
+    {
+        type0.words[idx]      = 0x00000000;
+        type0_mask.words[idx] = 0xffffffff;
+    }
+
+    next_cap_ptr += CFG_PCI_HDR_SIZE_BYTES;
+
+    // Construct PCI compatible structure value, and set writable bits where appropriate
+    type0.type0_struct.vendor_id               = 0x14fc;
+    type0.type0_struct.device_id               = 0x0002;
+    type0.type0_struct.command                 = 0x0006;     type0_mask.type0_struct.command = 0xfab8;
+    type0.type0_struct.status                  = 0x0010;
+    type0.type0_struct.revision_id             = 0x01;
+    type0.type0_struct.prog_if                 = 0x00;       // don't care
+    type0.type0_struct.subclass                = 0x80;       // other
+    type0.type0_struct.class_code              = 0x02;       // network controller
+    type0.type0_struct.cache_line_size         = 0x00;       type0_mask.type0_struct.cache_line_size         = 0x00;
+    type0.type0_struct.bar[0]                  = 0x00000008; type0_mask.type0_struct.bar[0]                  = 0x00000fff; // 32-bit, prefetchable, 4K
+    type0.type0_struct.bar[1]                  = 0x00000008; type0_mask.type0_struct.bar[1]                  = 0x000003ff; // 32-bit, prefetchable, 1K
+    type0.type0_struct.bar[2]                  = 0x00000000;
+    type0.type0_struct.bar[3]                  = 0x00000000;
+    type0.type0_struct.bar[4]                  = 0x00000000;
+    type0.type0_struct.bar[5]                  = 0x00000000;
+    type0.type0_struct.expansion_rom_base_addr = 0x00000000; type0_mask.type0_struct.expansion_rom_base_addr = 0x000007fe;
+    type0.type0_struct.capabilities_ptr        = next_cap_ptr;
+
+    // Update config space and mask with values
+    for (int idx = 0; idx < (CFG_PCI_HDR_SIZE_BYTES/4); idx++)
+    {
+        pcie->writeConfigSpace     (next_cap_ptr - CFG_PCI_HDR_SIZE_BYTES + idx*4, type0.words[idx]);
+        pcie->writeConfigSpaceMask (next_cap_ptr - CFG_PCI_HDR_SIZE_BYTES + idx*4, type0_mask.words[idx]);
+    }
+
+    // -------------------------------------
+    // PCIe capability
+    // -------------------------------------
+
+    // Default to all zeros and read-only
+    for (int idx = 0; idx < (CFG_PCIE_CAPS_SIZE_BYTES/4); idx++)
+    {
+        pcie_caps.words[idx]      = 0x00000000;
+        pcie_caps_mask.words[idx] = 0xffffffff;
+    }
+
+    next_cap_ptr += CFG_PCIE_CAPS_SIZE_BYTES;
+
+    pcie_caps.pcie_caps_struct.cap_id         = 0x10;
+    pcie_caps.pcie_caps_struct.next_cap_ptr   = next_cap_ptr;
+    pcie_caps.pcie_caps_struct.device_caps    = 0x00000001;   // max payload = 256 bytes
+    pcie_caps.pcie_caps_struct.device_control = 0x2810;       pcie_caps_mask.pcie_caps_struct.device_control = 0x0000;
+    pcie_caps.pcie_caps_struct.link_caps      = 0x0003fc12;
+    pcie_caps.pcie_caps_struct.link_control   = 0x0000;       pcie_caps_mask.pcie_caps_struct.link_control   = 0xf004;
+    pcie_caps.pcie_caps_struct.link_status    = 0x0091;
+    pcie_caps.pcie_caps_struct.link_control2  = 0x0002;       pcie_caps_mask.pcie_caps_struct.link_control2  = 0xe06f;
+
+    for (int idx = 0; idx < (CFG_PCIE_CAPS_SIZE_BYTES/4); idx++)
+    {
+        pcie->writeConfigSpace     (next_cap_ptr - CFG_PCIE_CAPS_SIZE_BYTES + idx*4, pcie_caps.words[idx]);
+        pcie->writeConfigSpaceMask (next_cap_ptr - CFG_PCIE_CAPS_SIZE_BYTES + idx*4, pcie_caps_mask.words[idx]);
+    }
+
+    // -------------------------------------
+    // MSI capability
+    // -------------------------------------
+
+    // Default to all zeros and read-only
+    for (int idx = 0; idx < (CFG_MSI_CAPS_SIZE_BYTES/4); idx++)
+    {
+        msi_caps.words[idx]      = 0x00000000;
+        msi_caps_mask.words[idx] = 0xffffffff;
+    }
+
+    next_cap_ptr += CFG_MSI_CAPS_SIZE_BYTES;
+
+    msi_caps.msi_caps_struct.cap_id           = 0x05;
+    msi_caps.msi_caps_struct.next_cap_ptr     = next_cap_ptr;
+    msi_caps.msi_caps_struct.mess_control     = 0x0080;     msi_caps_mask.msi_caps_struct.mess_control = 0xff8e;
+    msi_caps.msi_caps_struct.mess_addr_lo     = 0x00000000; msi_caps_mask.msi_caps_struct.mess_addr_lo = 0x00000003;
+    msi_caps.msi_caps_struct.mess_addr_hi     = 0x00000000; msi_caps_mask.msi_caps_struct.mess_addr_hi = 0x00000000;
+    msi_caps.msi_caps_struct.mess_data        = 0x0000;     msi_caps_mask.msi_caps_struct.mess_data    = 0x0000;
+    msi_caps.msi_caps_struct.mask             = 0x00000000; msi_caps_mask.msi_caps_struct.mask         = 0x00000000;
+    msi_caps.msi_caps_struct.pending          = 0x00000000;
+
+    for (int idx = 0; idx < (CFG_MSI_CAPS_SIZE_BYTES/4); idx++)
+    {
+        pcie->writeConfigSpace     (next_cap_ptr - CFG_MSI_CAPS_SIZE_BYTES + idx*4, msi_caps.words[idx]);
+        pcie->writeConfigSpaceMask (next_cap_ptr - CFG_MSI_CAPS_SIZE_BYTES + idx*4, msi_caps_mask.words[idx]);
+    }
+
+    // -------------------------------------
+    // Power management capability
+    // -------------------------------------
+
+    // Default to all zeros and read-only
+    for (int idx = 0; idx < (CFG_PWR_MGMT_CAPS_SIZE_BYTES/4); idx++)
+    {
+        pwr_mgmnt_caps.words[idx]      = 0x00000000;
+        pwr_mgmnt_caps_mask.words[idx] = 0xffffffff;
+    }
+
+    next_cap_ptr += CFG_PWR_MGMT_CAPS_SIZE_BYTES;
+
+    pwr_mgmnt_caps.pwr_mgmnt_caps_struct.cap_id                   = 0x01;
+    pwr_mgmnt_caps.pwr_mgmnt_caps_struct.next_cap_ptr             = 0x00; // last capability
+    pwr_mgmnt_caps.pwr_mgmnt_caps_struct.pwr_mgmnt_caps           = 0x0003;
+    pwr_mgmnt_caps.pwr_mgmnt_caps_struct.pwr_mgmnt_control_status = 0x0008;  pwr_mgmnt_caps_mask.pwr_mgmnt_caps_struct.pwr_mgmnt_control_status = 0xe0fc;
+
+    for (int idx = 0; idx < (CFG_PWR_MGMT_CAPS_SIZE_BYTES/4); idx++)
+    {
+        pcie->writeConfigSpace     (next_cap_ptr - CFG_PWR_MGMT_CAPS_SIZE_BYTES + idx*4, pwr_mgmnt_caps.words[idx]);
+        pcie->writeConfigSpaceMask (next_cap_ptr - CFG_PWR_MGMT_CAPS_SIZE_BYTES + idx*4, pwr_mgmnt_caps_mask.words[idx]);
     }
 }

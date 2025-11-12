@@ -14,7 +14,7 @@
 //
 //  Revision History:
 //    Date      Version    Description
-//    09/2025   ????       Initial Version
+//    09/2025   ????.??    Initial Version
 //
 //  This file is part of OSVVM.
 //
@@ -49,77 +49,17 @@ extern "C" {
 #ifndef _PCIEVCINTERFACE_H_
 #define _PCIEVCINTERFACE_H_
 
-#ifndef LO_NIBBLE_MASK
-#define LO_NIBBLE_MASK               0x0f
-#endif
-
-#ifndef HI_NIBBLE_MASK
-#define HI_NIBBLE_MASK               0xf0
-#endif
-
 // -------------------------------------------------------------------------
 // DEFINES
 // -------------------------------------------------------------------------
 
-    // **** If the below values change, also update ../src/PcieVcInterfacePkg.vhd ****
+#ifndef LO_NIBBLE_MASK
+#define LO_NIBBLE_MASK                               0x0f
+#endif
 
-    // These following commented out constants are defined by the pcievhost
-    // model's code in pcie_vhost_map.h
-
-// #define PVH_STOP              -3
-// #define PVH_FINISH            -2
-// #define PVH_FATAL             -1
-// #define
-// #define LINKADDR0              0
-// #define LINKADDR1              1
-// #define LINKADDR2              2
-// #define LINKADDR3              3
-// #define LINKADDR4              4
-// #define LINKADDR5              5
-// #define LINKADDR6              6
-// #define LINKADDR7              7
-// #define LINKADDR8              8
-// #define LINKADDR9              9
-// #define LINKADDR10            10
-// #define LINKADDR11            11
-// #define LINKADDR12            12
-// #define LINKADDR13            13
-// #define LINKADDR14            14
-// #define LINKADDR15            15
-// #define
-// #define NODENUMADDR          200
-// #define LANESADDR            201
-// #define PVH_INVERT           202
-// #define EP_ADDR              203
-// #define CLK_COUNT            204
-// #define LINK_STATE           205
-// #define RESET_STATE          206
-
-// Parameter read addresses
-#define REQID_ADDR           300
-#define PIPE_ADDR            301
-#define EN_ECRC_ADDR         302
-#define INITPHY_ADDR         303
-
-// Transaction interface options address offsets
-#define GETNEXTTRANS         400
-#define GETINTTOMODEL        401
-#define GETBOOLTOMODEL       402
-#define GETTIMETOMODEL       403
-#define GETADDRESS           404
-#define GETADDRESSWIDTH      405
-#define GETDATATOMODEL       406
-#define GETDATAWIDTH         407
-#define GETPARAMS            408
-#define GETOPTIONS           409
-#define ACKTRANS             410
-#define SETDATAFROMMODEL     411
-#define SETBOOLFROMMODEL     412
-#define SETINTFROMMODEL      413
-#define POPDATA              414
-#define PUSHDATA             415
-
-// **** If the above values change, also update ../src/PcieVcInterfacePkg.vhd ****
+#ifndef HI_NIBBLE_MASK
+#define HI_NIBBLE_MASK                               0xf0
+#endif
 
 // -------------------------------------------------------------------------
 // Class definition
@@ -127,52 +67,124 @@ extern "C" {
 
 class pcieVcInterface
 {
-
 public:
 
-    static constexpr int   DELTACYCLE            =  -1;
-    static constexpr int   CLOCKEDCYCLE          =   0;
-    static constexpr int   PIPE_MODE_ENABLED     =   1;
-    static constexpr int   PIPE_MODE_DISABLED    =   0;
-    static constexpr int   EP_MODE_ENABLED       =   1;
-    static constexpr int   EP_MODE_DISABLED      =   0;
-    static constexpr int   DIGEST_MODE_ENABLED   =   1;
-    static constexpr int   DIGEST_MODE_DISABLED  =   0;
-    static constexpr int   strbufsize            = 256;
-    static constexpr int   databufsize           = 4096;
+    // -------------------------------
+    // Class constant definitions
+    // -------------------------------
 
-    static constexpr int   FREERUNSIM            = 0;
-    static constexpr int   STOPSIM               = 1;
-    static constexpr int   FINISHSIM             = 2;
+// **** If the below values change, also update ../src/PcieVcInterfacePkg.vhd ****
+//  v    v    v    v    v    v    v    v    v    v    v    v    v    v    v    v
+    // These following commented out constants are defined by the pcievhost
+    // model's code in pcie_vhost_map.h
 
-    static constexpr int   VCOPTIONSTART         = 1000;
-    static constexpr int   ENDMODELRUN           = VCOPTIONSTART;
+    // #define             PVH_STOP                    -3
+    // #define             PVH_FINISH                  -2
+    // #define             PVH_FATAL                   -1
+    // #define
+    // #define             LINKADDR0                    0
+    // #define             LINKADDR1                    1
+    // #define             LINKADDR2                    2
+    // #define             LINKADDR3                    3
+    // #define             LINKADDR4                    4
+    // #define             LINKADDR5                    5
+    // #define             LINKADDR6                    6
+    // #define             LINKADDR7                    7
+    // #define             LINKADDR8                    8
+    // #define             LINKADDR9                    9
+    // #define             LINKADDR10                  10
+    // #define             LINKADDR11                  11
+    // #define             LINKADDR12                  12
+    // #define             LINKADDR13                  13
+    // #define             LINKADDR14                  14
+    // #define             LINKADDR15                  15
+    // #define
+    // #define             NODENUMADDR                200
+    // #define             LANESADDR                  201
+    // #define             PVH_INVERT                 202
+    // #define             EP_ADDR                    203
+    // #define             CLK_COUNT                  204
+    // #define             LINK_STATE                 205
+    // #define             RESET_STATE                206
 
-    static constexpr int   SETTRANSMODE          = 1001;
-    static constexpr int   INITDLL               = 1002;
-    static constexpr int   INITPHY               = 1003;
-    static constexpr int   SETRDLCK              = 1004;
-    static constexpr int   SETCMPLRID            = 1005;
-    static constexpr int   SETCMPLCID            = 1006;
-    static constexpr int   SETCMPLRLEN           = 1007;
-    static constexpr int   SETCMPLTAG            = 1008;
-    static constexpr int   SETREQTAG             = 1009;
-    static constexpr int   SETCFGSPC             = 1010;
-    static constexpr int   SETCFGSPCMASK         = 1011;
-    static constexpr int   SETCFGSPCOFFSET       = 1012;
-    
-    
-    static constexpr int   GETLASTCMPLSTATUS     = 2000;
-    static constexpr int   GETLASTRXREQTAG       = 2001;
+    // Generics address offsets
+    static constexpr int   REQID_ADDR            =    300;
+    static constexpr int   PIPE_ADDR             =    301;
+    static constexpr int   EN_ECRC_ADDR          =    302;
+    static constexpr int   INITPHY_ADDR          =    303;
 
-    static constexpr int   CMPL_ADDR_MASK        = 0x7c;
+    // Transaction interface options address offsets
+    static constexpr int   GETNEXTTRANS          =    400;
+    static constexpr int   GETINTTOMODEL         =    401;
+    static constexpr int   GETBOOLTOMODEL        =    402;
+    static constexpr int   GETTIMETOMODEL        =    403;
+    static constexpr int   GETADDRESS            =    404;
+    static constexpr int   GETADDRESSWIDTH       =    405;
+    static constexpr int   GETDATATOMODEL        =    406;
+    static constexpr int   GETDATAWIDTH          =    407;
+    static constexpr int   GETPARAMS             =    408;
+    static constexpr int   GETOPTIONS            =    409;
+    static constexpr int   ACKTRANS              =    410;
+    static constexpr int   SETDATAFROMMODEL      =    411;
+    static constexpr int   SETBOOLFROMMODEL      =    412;
+    static constexpr int   SETINTFROMMODEL       =    413;
+    static constexpr int   POPDATA               =    414;
+    static constexpr int   PUSHDATA              =    415;
+
+    static constexpr int   VCOPTIONSTART         =   1000;
+    static constexpr int   ENDMODELRUN           =   VCOPTIONSTART;
+
+    static constexpr int   SETTRANSMODE          =   1001;
+    static constexpr int   INITDLL               =   1002;
+    static constexpr int   INITPHY               =   1003;
+    static constexpr int   SETRDLCK              =   1004;
+    static constexpr int   SETCMPLRID            =   1005;
+    static constexpr int   SETCMPLCID            =   1006;
+    static constexpr int   SETCMPLRLEN           =   1007;
+    static constexpr int   SETCMPLTAG            =   1008;
+    static constexpr int   SETREQTAG             =   1009;
+    static constexpr int   SETCFGSPC             =   1010;
+    static constexpr int   SETCFGSPCMASK         =   1011;
+    static constexpr int   SETCFGSPCOFFSET       =   1012;
+    static constexpr int   SETMEMADDRLO          =   1013;
+    static constexpr int   SETMEMADDRHI          =   1014;
+    static constexpr int   SETMEMDATA            =   1015;
+
+
+    static constexpr int   GETLASTCMPLSTATUS     =   2000;
+    static constexpr int   GETLASTRXREQTAG       =   2001;
+    static constexpr int   GETMEMDATA            =   2002;
+
+//  ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^
+// **** If the above values change, also update ../src/PcieVcInterfacePkg.vhd ****
+
+    static constexpr int   DELTACYCLE            =     -1;
+    static constexpr int   CLOCKEDCYCLE          =      0;
+    static constexpr int   PIPE_MODE_ENABLED     =      1;
+    static constexpr int   PIPE_MODE_DISABLED    =      0;
+    static constexpr int   EP_MODE_ENABLED       =      1;
+    static constexpr int   EP_MODE_DISABLED      =      0;
+    static constexpr int   DIGEST_MODE_ENABLED   =      1;
+    static constexpr int   DIGEST_MODE_DISABLED  =      0;
+    static constexpr int   STRBUFSIZE            =    256;
+    static constexpr int   DATABUFSIZE           =   4096;
+
+    static constexpr int   FREERUNSIM            =      0;
+    static constexpr int   STOPSIM               =      1;
+    static constexpr int   FINISHSIM             =      2;
+
+    static constexpr int   CMPL_ADDR_MASK        =   0x7c;
     static constexpr int   CMPL_STATUS_VOID      = 0xffff;
-    
-    static constexpr int   TLP_TAG_AUTO          = 0x100;
+
+    static constexpr int   TLP_TAG_AUTO          =  0x100;
+
+    // -------------------------------
+    // Class type definitions
+    // -------------------------------
 
     // Single data buffer vector type
     typedef std::vector<PktData_t> DataVec_t;
-    
+
     // Receive data structure type
     typedef  struct {
         PktData_t cpl_status;
@@ -180,10 +192,11 @@ public:
         PktData_t loaddr;
         DataVec_t rxbuf;
     } DataBuf_t;
-    
+
     // Receive data queue type
     typedef std::queue<DataBuf_t> DataBufQueue_t;
 
+    // Enumerated type for different TLPs
     typedef enum pcie_trans_mode_e
     {
         MEM_TRANS,
@@ -194,7 +207,14 @@ public:
         PART_CPL_TRANS
     } pcie_trans_mode_t;
 
-                pcieVcInterface (const unsigned nodeIn) : node (nodeIn)
+    // -------------------------------
+    // Public methods
+    // -------------------------------
+
+public:
+
+    // Constructor
+    pcieVcInterface (const unsigned nodeIn) : node (nodeIn)
                 {
                     // Create a PCIe API object
                     pcie        = new pcieModelClass(nodeIn);
@@ -215,15 +235,24 @@ public:
                     cmpltag          = 0;
                     cmplrlen         = 0;
                     cfgspc_offset    = 0;
+                    mem_addr         = 0;
                     last_cpl_status  = CMPL_STATUS_VOID;
 
-                    txdatabuf   = new PktData_t[databufsize];
+                    txdatabuf        = new PktData_t[DATABUFSIZE];
                 };
 
+    // Run main PCIe VC function
     void        run(void);
+
+    // Run automatic EP mode
+    void        runAutoEp(void);
 
     // Input data callback, passing in a packet, error status
     void        InputCallback (pPkt_t pkt, int status);
+
+   // -------------------------------
+   // Private member variable
+   // -------------------------------
 
 private:
 
@@ -244,7 +273,8 @@ private:
     unsigned           cmpltag;
     unsigned           cmplrlen;
     unsigned           cfgspc_offset;
-    char               sbuf[strbufsize];
+    uint64_t           mem_addr;
+    char               sbuf[STRBUFSIZE];
     pPktData_t         txdatabuf;
 
     // Queue for RX buffers, for use by input callback
@@ -252,6 +282,17 @@ private:
 
     PktData_t          last_cpl_status;
     PktData_t          last_rx_tag;
+
+    // -------------------------------
+    // Private methods
+    // -------------------------------
+
+private:
+    // *EXAMPLE* Type 0 configuration setup for automatic EP model
+    void        ConfigureType0PcieCfg (pcieModelClass* pcie);
+
+    // Input callback for automatic EP model (static so can be used as a callback).
+    static void VUserInputAutoEp      (pPkt_t pkt, int status, void* usrptr);
 
 };
 

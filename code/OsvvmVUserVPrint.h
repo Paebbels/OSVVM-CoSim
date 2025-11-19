@@ -46,10 +46,9 @@
 // two lines to be advanced, so replace new lines with carriage returns
 // which seems to work
 
-# ifndef ALDEC
-#  ifdef _WIN32
+#if defined(SIEMENS) && defined(_WIN32)
 
-# define VPrint(format, ...) {int len;                                             \
+#define VPrint(format, ...) { int len;                                              \
                               char formbuf[256];                                   \
                               strncpy(formbuf, format, 255);                       \
                               len = strlen(formbuf);                               \
@@ -58,11 +57,8 @@
                                   formbuf[i] = '\r';                               \
                               printf (formbuf, ##__VA_ARGS__);                     \
                               }
-#  else
-#  define VPrint(...) {printf(__VA_ARGS__);}
-#  endif
 # else
-#  define VPrint(...) {vhpi_printf(__VA_ARGS__);}
+#  define VPrint(...) {printf(__VA_ARGS__);}
 # endif
 
 #ifdef DEBUG

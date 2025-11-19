@@ -70,7 +70,7 @@ package OsvvmVprocPkg is
   ) ;           
   attribute foreign of VGetBurstWrByte : procedure is "VHPI VProc.so; VGetBurstWrByte" ;
                 
-  procedure VS  etBurstRdByte (
+  procedure VSetBurstRdByte (
     node        : in  integer ;
     idx         : in  integer ;
     data        : in  integer

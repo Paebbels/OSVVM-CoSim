@@ -39,14 +39,14 @@
 #   USRCDIR     : Directory where the test source directory is located
 #   OPDIR       : Directory for compilation output
 #   USRFLAGS    : Additional user defined compile and link flags
-#   AVHDLCDIR   : Location of Active-HDL installation
+#   AHDLDIR     : Location of Active-HDL installation
 #
 # --------------------------------------------------------------------------
 
 USRCDIR            = usercode
 OPDIR              = .
 USRFLAGS           =
-AVHDLCDIR          = /c/Aldec/Active-HDL-13-x64
+AHDLDIR            = /c/Aldec/Active-HDL-16-x64
 
 # Get OS type
 OSTYPE:=$(shell uname)
@@ -88,7 +88,7 @@ LTSSM_INCL         = $(wildcard $(LTSSMDIR)/*.h)
 VOBJS              = $(addprefix $(VOBJDIR)/, $(VPROC_C_BASE:%.c=%.o) $(VPROC_CPP_BASE:%.cpp=%.o) $(LTSSM_CPP_BASE:%.c=%.o))
 VUOBJS             = $(addprefix $(VOBJDIR)/, $(USER_C_BASE:%.c=%.o)  $(USER_CPP_BASE:%.cpp=%.o))
 
-AVHDLFLAGS         = -m64 -DALDEC -DACTIVEHDL -I$(ALDECDIR)/pli/Include -L$(ALDECDIR)/pli/Lib -l:aldecpli.lib
+AVHDLFLAGS         = -m64 -DALDEC -DACTIVEHDL -I$(AHDLDIR)/pli/Include -L$(AHDLDIR)/pli/Lib -l:aldecpli.lib
 
 RV32EXE            = test.exe
 RV32CMD            = cp $(USRCDIR)/test.exe $(OPDIR)

@@ -49,6 +49,8 @@ OPDIR              = .
 USRFLAGS           =
 SIM                = ModelSim
 
+# RivieraPRO only
+ALDECDIR           =  /c/Aldec/Riviera-PRO-2025.07-x64
 
 # Get OS type
 OSTYPE:=$(shell uname)
@@ -65,7 +67,11 @@ ifneq ($(OSTYPE), Linux)
   ifeq ("$(SIM)", "ModelSim")
     PCIELIB=pcie_win32
   else
-    PCIELIB=pcie_win64
+    ifeq ("$(SIM)", "QuestaSim")
+        PCIELIB=pcie_siemens_win64
+    else
+        PCIELIB=pcie_win64
+    endif
   endif
 else
   ifeq ("$(SIM)", "ModelSim")
@@ -102,7 +108,6 @@ TOOLFLAGS          = -m64
 ifeq ("$(SIM)", "QuestaSim")
   TOOLFLAGS        += -DSIEMENS
 else ifeq ("$(SIM)", "RivieraPRO")
-  ALDECDIR         =  /c/Aldec/Riviera-PRO-2022.10-x64
   TOOLFLAGS        += -DALDEC -I$(ALDECDIR)/interfaces/include
   ifeq ($(OSTYPE), Linux)
     TOOLFLAGS      += -L$(ALDECDIR)/bin -laldecpli

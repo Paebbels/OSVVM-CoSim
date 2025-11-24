@@ -128,13 +128,14 @@ public:
     static constexpr int   SETDATAFROMMODEL      =    411;
     static constexpr int   SETBOOLFROMMODEL      =    412;
     static constexpr int   SETINTFROMMODEL       =    413;
-    static constexpr int   POPDATA               =    414;
-    static constexpr int   PUSHDATA              =    415;
+    static constexpr int   POPWDATA              =    414;
+    static constexpr int   PUSHWDATA             =    415;
+    static constexpr int   POPRDATA              =    416;
+    static constexpr int   PUSHRDATA             =    417;
 
     static constexpr int   VCOPTIONSTART         =   1000;
     static constexpr int   ENDMODELRUN           =   VCOPTIONSTART;
 
-    static constexpr int   SETTRANSMODE          =   1001;
     static constexpr int   INITDLL               =   1002;
     static constexpr int   INITPHY               =   1003;
     static constexpr int   SETRDLCK              =   1004;
@@ -149,11 +150,9 @@ public:
     static constexpr int   SETMEMADDRLO          =   1013;
     static constexpr int   SETMEMADDRHI          =   1014;
     static constexpr int   SETMEMDATA            =   1015;
+    static constexpr int   SETMEMENDIANNESS      =   1016;
 
-
-    static constexpr int   GETLASTCMPLSTATUS     =   2000;
-    static constexpr int   GETLASTRXREQTAG       =   2001;
-    static constexpr int   GETMEMDATA            =   2002;
+    static constexpr int   GETMEMDATA            =   2000;
 
 //  ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^
 // **** If the above values change, also update ../src/PcieVcInterfacePkg.vhd ****
@@ -177,6 +176,23 @@ public:
     static constexpr int   CMPL_STATUS_VOID      = 0xffff;
 
     static constexpr int   TLP_TAG_AUTO          =  0x100;
+    
+    static constexpr int   LITTLE_ENDIAN         =      1;
+    static constexpr int   BIG_ENDIAN            =      0;
+    
+    static constexpr int   PARAM_TRANS_MODE      =      0;
+    static constexpr int   PARAM_RDLCK           =      1;
+    static constexpr int   PARAM_CMPLRID         =      2;
+    static constexpr int   PARAM_CMPLCID         =      3;
+    static constexpr int   PARAM_CMPLRLEN        =      4;
+    static constexpr int   PARAM_CMPLRTAG        =      5;
+    static constexpr int   PARAM_CMPLSTATUS      =      6;
+    static constexpr int   PARAM_REQTAG          =      7;
+    
+    static constexpr int   BYTE_OFFSET_MASK      =    0x3;
+    
+    static constexpr int   GETLASTCMPLSTATUS     =      0;
+    static constexpr int   GETLASTRXREQTAG       =      1;
 
     // -------------------------------
     // Class type definitions
@@ -191,10 +207,24 @@ public:
         PktData_t tag;
         PktData_t loaddr;
         DataVec_t rxbuf;
-    } DataBuf_t;
+    } CplDataBuf_t;
 
-    // Receive data queue type
-    typedef std::queue<DataBuf_t> DataBufQueue_t;
+    // Completion receive data queue type
+    typedef std::queue<CplDataBuf_t> CplDataBufQueue_t;
+
+    // Write data structure type
+    typedef  struct {
+        PktData_t tag;
+        uint64_t  addr;
+        unsigned  le;
+        unsigned  fe;
+        uint32_t  byte_length;
+        DataVec_t wrbuf;
+    } WrDataBuf_t;
+
+    // Completion receive data queue type
+    typedef std::queue<WrDataBuf_t> WrDataBufQueue_t;
+
 
     // Enumerated type for different TLPs
     typedef enum pcie_trans_mode_e
@@ -217,7 +247,7 @@ public:
     pcieVcInterface (const unsigned nodeIn) : node (nodeIn)
                 {
                     // Create a PCIe API object
-                    pcie        = new pcieModelClass(nodeIn);
+                    pcie             = new pcieModelClass(nodeIn);
 
                     // Default the internal state member variables
                     reset_state      = 0;
@@ -225,15 +255,8 @@ public:
                     rid              = node;
                     pipe_mode        = PIPE_MODE_DISABLED;
                     ep_mode          = EP_MODE_DISABLED;
+                    endian_mode      = LITTLE_ENDIAN;
                     digest_mode      = DIGEST_MODE_DISABLED;
-
-                    trans_mode       = MEM_TRANS;
-                    rd_lck           = false;
-                    tag              = 0;
-                    cmplrid          = 0;
-                    cmplcid          = 0;
-                    cmpltag          = 0;
-                    cmplrlen         = 0;
                     cfgspc_offset    = 0;
                     mem_addr         = 0;
                     last_cpl_status  = CMPL_STATUS_VOID;
@@ -246,9 +269,6 @@ public:
 
     // Run automatic EP mode
     void        runAutoEp(void);
-
-    // Input data callback, passing in a packet, error status
-    void        InputCallback (pPkt_t pkt, int status);
 
    // -------------------------------
    // Private member variable
@@ -266,19 +286,16 @@ private:
     unsigned           pipe_mode;
     unsigned           ep_mode;
     unsigned           digest_mode;
-    pcie_trans_mode_t  trans_mode;
-    bool               rd_lck;
-    unsigned           cmplrid;
-    unsigned           cmplcid;
-    unsigned           cmpltag;
-    unsigned           cmplrlen;
+    unsigned           endian_mode;
     unsigned           cfgspc_offset;
     uint64_t           mem_addr;
     char               sbuf[STRBUFSIZE];
     pPktData_t         txdatabuf;
 
-    // Queue for RX buffers, for use by input callback
-    DataBufQueue_t     rxbufq;
+    // Queue for completion RX buffers, for use by input callback
+    CplDataBufQueue_t  rxbufq;
+    
+    WrDataBufQueue_t   wrbufq;
 
     PktData_t          last_cpl_status;
     PktData_t          last_rx_tag;
@@ -289,7 +306,11 @@ private:
 
 private:
     // *EXAMPLE* Type 0 configuration setup for automatic EP model
-    void        ConfigureType0PcieCfg (pcieModelClass* pcie);
+    void        ConfigureType0PcieCfg (void);
+
+    // Input data callback, passing in a packet, error status
+    static void VUserInput    (pPkt_t pkt, int status, void* obj_instance);
+    void        InputCallback (pPkt_t pkt, int status);
 
     // Input callback for automatic EP model (static so can be used as a callback).
     static void VUserInputAutoEp      (pPkt_t pkt, int status, void* usrptr);

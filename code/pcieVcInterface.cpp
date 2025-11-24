@@ -102,7 +102,7 @@ static inline int CalcWordCount (const int byte_len, const int be)
 }
 
 //-------------------------------------------------------------
-// VUserInput()
+// pcieVcInterface::VUserInput()
 //
 // Singleton re-entrant wrapper for pcieVcInterface object's
 // input callback function, with object instance pointer passed
@@ -110,7 +110,7 @@ static inline int CalcWordCount (const int byte_len, const int be)
 //
 //-------------------------------------------------------------
 
-static void VUserInput(pPkt_t pkt, int status, void* obj_instance)
+void pcieVcInterface::VUserInput(pPkt_t pkt, int status, void* obj_instance)
 {
     ((pcieVcInterface*)obj_instance)->InputCallback(pkt, status);
 }
@@ -132,8 +132,6 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
     if (pkt->seq == DLLP_SEQ_ID)
     {
         DebugVPrint("---> VUserInput_0 received DLLP\n");
-        free(pkt->data);
-        free(pkt);
     }
     // Process completions
     else if (tlp_type == TL_CPL || tlp_type == TL_CPLD || tlp_type == TL_CPLLK || tlp_type == TL_CPLDLK)
@@ -141,7 +139,7 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
         DebugVPrint("---> InputCallback received TLP completion,  sequence %d of %d bytes\n", pkt->seq, pkt->ByteCount);
 
         // Create a new entry in the queue for the completion
-        rxbufq.push(DataBuf_t());
+        rxbufq.push(CplDataBuf_t());
 
         // Extract the completion status from the packet.
         rxbufq.back().cpl_status = GET_CPL_STATUS(pkt->data);
@@ -184,17 +182,44 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
                 DebugVPrint("\n");
             }
         }
-
-        // Once input packet is finished with, the allocated space *must* be freed.
-        // All input packets have their own memory space to avoid overwrites with
-        // shared buffers.
-        DISCARD_PACKET(pkt);
     }
-    // Process requests (mem, config space, i/o, message)
+    // Process memory writes
+    else if (tlp_type == TL_MWR32 || tlp_type == TL_MWR64)
+    {
+        // Create a new entry in the queue for the completion
+        wrbufq.push(WrDataBuf_t());
+
+        // Get settings
+        wrbufq.back().byte_length = pkt->ByteCount;
+        wrbufq.back().addr        = GET_TLP_ADDRESS(pkt->data);
+        wrbufq.back().le          = GET_TLP_LBE(pkt->data);
+        wrbufq.back().fe          = GET_TLP_FBE(pkt->data);
+        wrbufq.back().tag         = GET_TLP_TAG(pkt->data);
+
+        if (pkt->ByteCount)
+        {
+            wrbufq.back().wrbuf.resize(pkt->ByteCount);
+
+            // Get a pointer to the start of the payload data
+            pPktData_t payload = GET_TLP_PAYLOAD_PTR(pkt->data);
+
+            // Fetch data into buffer
+            for (idx = 0; idx < pkt->ByteCount; idx++)
+            {
+                wrbufq.back().wrbuf[idx] = payload[idx];
+            }
+        }
+    }
+    // Process requests (mem reads, config space, i/o, message)
     else
     {
         // TO DO
     }
+
+    // Once input packet is finished with, the allocated space *must* be freed.
+    // All input packets have their own memory space to avoid overwrites with
+    // shared buffers.
+    DISCARD_PACKET(pkt);
 }
 
 //-------------------------------------------------------------
@@ -206,39 +231,46 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
 
 void pcieVcInterface::run(void)
 {
-    int        error = 0;
-    bool       end   = false;
-    int        halt  = 0;
+    int                error = 0;
+    bool               end   = false;
+    int                halt  = 0;
 
-    int        byteidx;
-    unsigned   operation;
-    unsigned   int_to_model;
-    unsigned   option;
-    int        pad_offset;
+    int                byteidx;
+    unsigned           operation;
+    unsigned           int_to_model;
+    unsigned           option;
+    int                pad_offset;
 
-    uint32_t   status;
-    uint32_t   be;
-    uint32_t   popdata;
-    uint32_t   memword;
+    uint32_t           status;
+    uint32_t           be;
+    uint32_t           popdata;
+    uint32_t           memword;
 
-    uint64_t   rdata;
-    uint64_t   wdata;
-    uint64_t   wdatawidth;
-    uint64_t   rdatawidth;
-    uint64_t   word_len;
-    uint64_t   remaining_len;
-    uint64_t   address;
-    uint64_t   addrlo;
+    uint64_t           rdata;
+    uint64_t           wdata;
+    uint64_t           wdatawidth;
+    uint64_t           rdatawidth;
+    uint64_t           word_len;
+    uint64_t           remaining_len;
+    uint64_t           address;
+    uint64_t           addrlo;
+
+    pcie_trans_mode_t  trans_mode;
+    bool               rd_lck;
+    unsigned           cmplrid;
+    unsigned           cmplcid;
+    unsigned           cmpltag;
+    unsigned           localtag;
 
     // Initialise PCIe VHost, with input callback function and no user pointer.
-    pcie->initialisePcie(VUserInput, this);
+    pcie->initialisePcie(pcieVcInterface::VUserInput, this);
 
     pcie->getPcieVersionStr(sbuf, STRBUFSIZE);
     VPrint("  %s\n", sbuf);
 
     DebugVPrint("pcieVcInterface::run: on node %d\n", node);
 
-    // Fetch the model parameters
+    // Fetch the model generics
     VRead(LANESADDR,    &link_width,  DELTACYCLE, node);
     VRead(PIPE_ADDR,    &pipe_mode,   DELTACYCLE, node);
     VRead(EP_ADDR,      &ep_mode,     DELTACYCLE, node);
@@ -272,10 +304,32 @@ void pcieVcInterface::run(void)
         VWrite(ACKTRANS, 1, DELTACYCLE, node);
 
         // Check if there is a new transaction (delta)
-        VRead(GETNEXTTRANS, &operation, DELTA_CYCLE, node);
+        VRead(GETNEXTTRANS, &operation, DELTACYCLE, node);
 
         switch (operation)
         {
+            case EXTEND_OP :
+
+                VRead(GETOPTIONS, &option, DELTACYCLE, node);
+
+                switch (option)
+                {
+                case GETLASTCMPLSTATUS:
+                    VWrite(SETINTFROMMODEL, last_cpl_status, DELTACYCLE, node);
+                    break;
+
+                case GETLASTRXREQTAG :
+                    VWrite(SETINTFROMMODEL, last_rx_tag,     DELTACYCLE, node);
+                    break;
+
+                default:
+                    VPrint("pcieVcInterface::run : ***ERROR. Unrecognised EXTEND_OP option (%d)\n", option);
+                    error++;
+                    break;
+                };
+
+                break;
+
             case GET_MODEL_OPTIONS :
 
                 VRead(GETOPTIONS,    &option,       DELTACYCLE, node);
@@ -288,7 +342,7 @@ void pcieVcInterface::run(void)
                     VWrite(SETINTFROMMODEL, last_rx_tag, DELTACYCLE, node);
                     break;
                 case GETMEMDATA:
-                    memword = pcie->readRamWord(mem_addr);
+                    memword = pcie->readRamWord(mem_addr, LITTLE_ENDIAN);
                     mem_addr += 4;
                     VWrite(SETINTFROMMODEL, memword, DELTACYCLE, node);
                     break;
@@ -330,69 +384,40 @@ void pcieVcInterface::run(void)
                         pcie->initFc();
                         break;
 
-                    // Set the transaction layer mode---memory, I/O, config space, completion or message
-                    case SETTRANSMODE:
-                        trans_mode = (pcie_trans_mode_t)int_to_model;
-                        break;
-
-                    case SETCMPLRID:
-                        cmplrid = int_to_model;
-                        break;
-
-                    case SETCMPLCID:
-                        cmplcid = int_to_model;
-                        break;
-
-                    case SETCMPLRLEN:
-                        cmplrlen = int_to_model;
-                        break;
-
-                    case SETCMPLTAG:
-                        cmpltag = int_to_model;
-                        break;
-
-                    case SETRDLCK:
-                        rd_lck = (bool)int_to_model;
-                        break;
-
-                    case SETREQTAG:
-                        // Update the tag if it is the valid range
-                        if (int_to_model >= 0 && int_to_model < TLP_TAG_AUTO)
-                        {
-                            tag = int_to_model;
-                        }
-                        break;
-                        
                     case SETCFGSPCOFFSET:
                         cfgspc_offset = int_to_model;
                         break;
-                        
+
                     case SETCFGSPC:
                         if (ep_mode)
                         {
                             pcie->writeConfigSpace(cfgspc_offset, int_to_model);
                         }
                         break;
-                        
+
                     case SETCFGSPCMASK:
                         if (ep_mode)
                         {
                             pcie->writeConfigSpaceMask(cfgspc_offset, int_to_model);
                         }
-                        break; 
+                        break;
+
+                    case SETMEMENDIANNESS:
+                        endian_mode = int_to_model ? LITTLE_ENDIAN : BIG_ENDIAN;
+                        break;
 
                     case SETMEMADDRLO:
                         mem_addr = (mem_addr & ~0xffffffffULL) | (uint64_t)((uint32_t)int_to_model & ~0xfffffffc);
                         break;
-               
+
                     case SETMEMADDRHI:
                         mem_addr = (mem_addr &  0xffffffffULL) | ((uint64_t)((uint32_t)int_to_model) << 32);
-                        break;    
-                    
+                        break;
+
                     case SETMEMDATA:
-                        pcie->writeRamWord(mem_addr, (uint32_t)int_to_model);
+                        pcie->writeRamWord(mem_addr, (uint32_t)int_to_model, LITTLE_ENDIAN);
                         mem_addr += 4;
-                        break;                         
+                        break;
 
                     default:
                         VPrint("pcieVcInterface::run : ***ERROR. Unrecognised SET_MODEL_OPTIONS option (%d)\n", option);
@@ -407,6 +432,14 @@ void pcieVcInterface::run(void)
                 VRead64(GETADDRESS,     &address,    DELTACYCLE, node);
                 VRead64(GETDATATOMODEL, &wdata,      DELTACYCLE, node);
                 VRead64(GETDATAWIDTH,   &wdatawidth, DELTACYCLE, node);
+
+                trans_mode = (pcie_trans_mode_t)VWrite(GETPARAMS, PARAM_TRANS_MODE, DELTACYCLE, node);
+
+                localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
+                if (localtag >= 0 && localtag <= TLP_TAG_AUTO)
+                {
+                    tag = localtag;
+                }
 
                 // For completions, the data bytes will start at an offset into the first word, determined
                 // by the address low 2 bits
@@ -482,10 +515,23 @@ void pcieVcInterface::run(void)
                 case CPL_TRANS :
                 case PART_CPL_TRANS :
 
-                    status        = CPL_SUCCESS;
+                    cmpltag       = VWrite(GETPARAMS, PARAM_CMPLRTAG,   DELTACYCLE, node);
+                    cmplrid       = VWrite(GETPARAMS, PARAM_CMPLRID,    DELTACYCLE, node);
+                    cmplcid       = VWrite(GETPARAMS, PARAM_CMPLCID,    DELTACYCLE, node);
+                    rd_lck        = VWrite(GETPARAMS, PARAM_RDLCK,      DELTACYCLE, node);
+                    status        = VWrite(GETPARAMS, PARAM_CMPLSTATUS, DELTACYCLE, node);
+
                     be            = CalcBe(address, wdatawidth/8);
                     word_len      = CalcWordCount(wdatawidth/8, be);
-                    remaining_len = (trans_mode == CPL_TRANS) ? word_len : cmplrlen;
+
+                    if (trans_mode == CPL_TRANS)
+                    {
+                        remaining_len = word_len;
+                    }
+                    else
+                    {
+                        remaining_len = VWrite(GETPARAMS, PARAM_CMPLRLEN,   DELTACYCLE, node);
+                    }
 
                     // Do a completion (effectively posted, so nothing to wait for)
                     pcie->partCompletionLockDelay(address & CMPL_ADDR_MASK, txdatabuf, status, be & 0xf, (be >> 4) & 0xf, remaining_len, word_len,
@@ -515,11 +561,21 @@ void pcieVcInterface::run(void)
                 VRead64(GETADDRESS,   &address,    DELTACYCLE, node);
                 VRead64(GETDATAWIDTH, &rdatawidth, DELTACYCLE, node);
 
+                trans_mode = (pcie_trans_mode_t)VWrite(GETPARAMS, PARAM_TRANS_MODE, DELTACYCLE, node);
+
+                localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
+                if (localtag >= 0 && localtag <= TLP_TAG_AUTO)
+                {
+                    tag = localtag;
+                }
+
                 if (operation != READ_DATA && operation != ASYNC_READ_DATA)
                 {
                     switch(trans_mode)
                     {
                     case MEM_TRANS :
+                        rd_lck     = (pcie_trans_mode_t)VWrite(GETPARAMS, PARAM_RDLCK,      DELTACYCLE, node);
+
                         // Instigate a memory read
                         pcie->memReadLockDigest(address, rdatawidth/8, tag++, rid, rd_lck, digest_mode, false);
                         break;
@@ -587,9 +643,17 @@ void pcieVcInterface::run(void)
                 VRead64(GETADDRESS,     &address,    DELTACYCLE, node);
                 VRead64(GETDATAWIDTH,   &wdatawidth, DELTACYCLE, node);
 
+                trans_mode = (pcie_trans_mode_t)VWrite(GETPARAMS, PARAM_TRANS_MODE, DELTACYCLE, node);
+
+                localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
+                if (localtag >= 0 && localtag <= TLP_TAG_AUTO)
+                {
+                    tag = localtag;
+                }
+
                 // For completions, the data bytes will start at an offset into the first word, determined
                 // by the address low 2 bits
-                pad_offset = (trans_mode == CPL_TRANS || trans_mode == PART_CPL_TRANS) ? (address & 0x3) : 0;
+                pad_offset = (trans_mode == CPL_TRANS || trans_mode == PART_CPL_TRANS) ? (address & BYTE_OFFSET_MASK) : 0;
 
                 for (int pidx = -pad_offset; pidx < (int)wdatawidth; pidx++)
                 {
@@ -599,7 +663,7 @@ void pcieVcInterface::run(void)
                     }
                     else
                     {
-                      VRead(POPDATA, &popdata, DELTACYCLE, node);
+                      VRead(POPWDATA, &popdata, DELTACYCLE, node);
                       txdatabuf[pidx + pad_offset] = popdata & 0xff;
                     }
                 }
@@ -614,14 +678,28 @@ void pcieVcInterface::run(void)
                 case CPL_TRANS :
                 case PART_CPL_TRANS :
 
-                    status        = CPL_SUCCESS;
+                    cmpltag       = VWrite(GETPARAMS, PARAM_CMPLRTAG,   DELTACYCLE, node);
+                    cmplrid       = VWrite(GETPARAMS, PARAM_CMPLRID,    DELTACYCLE, node);
+                    cmplcid       = VWrite(GETPARAMS, PARAM_CMPLCID,    DELTACYCLE, node);
+                    rd_lck        = VWrite(GETPARAMS, PARAM_RDLCK,      DELTACYCLE, node);
+                    status        = VWrite(GETPARAMS, PARAM_CMPLSTATUS, DELTACYCLE, node);
+
                     be            = CalcBe(address, wdatawidth);
                     word_len      = CalcWordCount(wdatawidth, be);
-                    remaining_len = (trans_mode == CPL_TRANS) ? word_len : cmplrlen;
+
+                    if (trans_mode == CPL_TRANS)
+                    {
+                        remaining_len = word_len;
+                    }
+                    else
+                    {
+                        remaining_len = VWrite(GETPARAMS, PARAM_CMPLRLEN,   DELTACYCLE, node);
+                    }
 
                     // Do a completion (effectively posted, so nothing to wait for). Align the address to a word
                     // boundary and only use the needed lower 7 bits.
-                    pcie->partCompletionLockDelay(address & CMPL_ADDR_MASK, txdatabuf, status, be & 0xf, (be >> 4) & 0xf, remaining_len, word_len, cmpltag, cmplcid, cmplrid,
+                    pcie->partCompletionLockDelay(address & CMPL_ADDR_MASK, txdatabuf, status, be & 0xf, (be >> 4) & 0xf, remaining_len, word_len,
+                                                  cmpltag, cmplcid, cmplrid,
                                                   rd_lck, digest_mode, false, false);
                     break;
 
@@ -635,6 +713,15 @@ void pcieVcInterface::run(void)
 
                 VRead64(GETADDRESS,     &address,    DELTACYCLE, node);
                 VRead64(GETDATAWIDTH,   &rdatawidth, DELTACYCLE, node);
+
+                trans_mode    = (pcie_trans_mode_t)VWrite(GETPARAMS, PARAM_TRANS_MODE, DELTACYCLE, node);
+                rd_lck        = VWrite(GETPARAMS, PARAM_RDLCK, DELTACYCLE, node);
+
+                localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
+                if (localtag >= 0 && localtag <= TLP_TAG_AUTO)
+                {
+                    tag = localtag;
+                }
 
                 pcie->memReadLockDigest(address, rdatawidth, tag++, rid, rd_lck, digest_mode, false);
 
@@ -651,7 +738,7 @@ void pcieVcInterface::run(void)
                     addrlo = rxbufq.front().loaddr & 0x3ULL;
                     for (byteidx = 0; byteidx < rdatawidth; byteidx++)
                     {
-                        VWrite(PUSHDATA, rxbufq.front().rxbuf[byteidx+addrlo], DELTACYCLE, node);
+                        VWrite(PUSHRDATA, rxbufq.front().rxbuf[byteidx+addrlo], DELTACYCLE, node);
                     }
                     rxbufq.pop();
                 }
@@ -672,6 +759,15 @@ void pcieVcInterface::run(void)
             case WAIT_FOR_TRANSACTION:
 
                 pcie->waitForCompletion();
+                break;
+
+            case EXTEND_WRITE_OP :
+
+                while (wrbufq.empty())
+                {
+                    SendIdle(1, node);
+                }
+
                 break;
 
             default :
@@ -722,7 +818,7 @@ void pcieVcInterface::runAutoEp()
     pcieModelClass* pcie = new pcieModelClass(node);
 
     // Initialise PCIe VHost, with input callback function and no user pointer.
-    pcie->initialisePcie(VUserInputAutoEp, &node);
+    pcie->initialisePcie(pcieVcInterface::VUserInputAutoEp, &node);
 
     unsigned pipe_mode, link_width, init_phy;
 
@@ -745,7 +841,7 @@ void pcieVcInterface::runAutoEp()
     pcie->pcieSeed(node);
 
     // Construct an endpoint PCIe configuration space setting
-    ConfigureType0PcieCfg(pcie);
+    ConfigureType0PcieCfg();
 
     // Wait until reset is inactivated
     do
@@ -781,7 +877,7 @@ void pcieVcInterface::runAutoEp()
 void pcieVcInterface::VUserInputAutoEp(pPkt_t pkt, int status, void* usrptr)
 {
     int node = *((int*)usrptr);
-    
+
     if (pkt->seq == DLLP_SEQ_ID)
     {
         DebugVPrint("---> VUserInputAutoEp received DLLP\n");
@@ -824,9 +920,11 @@ void pcieVcInterface::VUserInputAutoEp(pPkt_t pkt, int status, void* usrptr)
 //
 //-------------------------------------------------------------
 
-void pcieVcInterface::ConfigureType0PcieCfg (pcieModelClass* pcie)
+void pcieVcInterface::ConfigureType0PcieCfg (void)
 {
     unsigned        next_cap_ptr = 0;
+
+    pcieModelClass *pcie         = new pcieModelClass(node);
 
     // -------------------------------------
     // PPCI compatible header

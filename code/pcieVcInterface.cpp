@@ -308,39 +308,12 @@ void pcieVcInterface::run(void)
 
         switch (operation)
         {
-            case EXTEND_OP :
-
-                VRead(GETOPTIONS, &option, DELTACYCLE, node);
-
-                switch (option)
-                {
-                case GETLASTCMPLSTATUS:
-                    VWrite(SETINTFROMMODEL, last_cpl_status, DELTACYCLE, node);
-                    break;
-
-                case GETLASTRXREQTAG :
-                    VWrite(SETINTFROMMODEL, last_rx_tag,     DELTACYCLE, node);
-                    break;
-
-                default:
-                    VPrint("pcieVcInterface::run : ***ERROR. Unrecognised EXTEND_OP option (%d)\n", option);
-                    error++;
-                    break;
-                };
-
-                break;
 
             case GET_MODEL_OPTIONS :
 
                 VRead(GETOPTIONS,    &option,       DELTACYCLE, node);
                 switch (option)
                 {
-                case GETLASTCMPLSTATUS :
-                    VWrite(SETINTFROMMODEL, last_cpl_status, DELTACYCLE, node);
-                    break;
-                case GETLASTRXREQTAG :
-                    VWrite(SETINTFROMMODEL, last_rx_tag, DELTACYCLE, node);
-                    break;
                 case GETMEMDATA:
                     memword = pcie->readRamWord(mem_addr, LITTLE_ENDIAN);
                     mem_addr += 4;
@@ -477,8 +450,8 @@ void pcieVcInterface::run(void)
                         // Non-posted transaction, so do a wait for the status completion
                         pcie->waitForCompletion();
 
-                        last_cpl_status = rxbufq.front().cpl_status;
-                        last_rx_tag     = rxbufq.front().tag;
+                        VWrite64(SETPARAMS, (uint64_t)rxbufq.front().cpl_status | ((uint64_t)PARAM_CMPL_STATUS << 32), DELTACYCLE, node);
+                        VWrite64(SETPARAMS, (uint64_t)rxbufq.front().tag        | ((uint64_t)PARAM_CMPL_RX_TAG << 32), DELTACYCLE, node);
 
                         // Flag any bad status
                         if (rxbufq.front().cpl_status)
@@ -501,8 +474,8 @@ void pcieVcInterface::run(void)
                     // Non-posted transaction, so do a wait for the status completion
                     pcie->waitForCompletion();
 
-                    last_cpl_status = rxbufq.front().cpl_status;
-                    last_rx_tag     = rxbufq.front().tag;
+                    VWrite64(SETPARAMS, (uint64_t)rxbufq.front().cpl_status | ((uint64_t)PARAM_CMPL_STATUS << 32), DELTACYCLE, node);
+                    VWrite64(SETPARAMS, (uint64_t)rxbufq.front().tag        | ((uint64_t)PARAM_CMPL_RX_TAG << 32), DELTACYCLE, node);
 
                     // Flag any bad status
                     if (rxbufq.front().cpl_status)
@@ -610,8 +583,8 @@ void pcieVcInterface::run(void)
                     // Blocking read, so do a wait for the completion
                     pcie->waitForCompletion();
 
-                    last_cpl_status = rxbufq.front().cpl_status;
-                    last_rx_tag     = rxbufq.front().tag;
+                    VWrite64((uint64_t)SETPARAMS, rxbufq.front().cpl_status | ((uint64_t)PARAM_CMPL_STATUS << 32), DELTACYCLE, node);
+                    VWrite64((uint64_t)SETPARAMS, rxbufq.front().tag        | ((uint64_t)PARAM_CMPL_RX_TAG << 32), DELTACYCLE, node);
 
                     // If a successful completion returned, extract data
                     if (!rxbufq.front().cpl_status)
@@ -620,7 +593,7 @@ void pcieVcInterface::run(void)
                         addrlo = rxbufq.front().loaddr & 0x3ULL;
                         for (rdata = 0, byteidx = 0; byteidx < (rdatawidth/8); byteidx++)
                         {
-                            rdata |= (rxbufq.front().rxbuf[byteidx+addrlo] & 0xff) << (8 * byteidx);
+                            rdata |= ((uint32_t)rxbufq.front().rxbuf[byteidx+addrlo] & 0xff) << (8 * byteidx);
                         }
                     }
                     else
@@ -728,8 +701,8 @@ void pcieVcInterface::run(void)
                 // Blocking read, so do a wait for the completion
                 pcie->waitForCompletion();
 
-                last_cpl_status = rxbufq.front().cpl_status;
-                last_rx_tag     = rxbufq.front().tag;
+                VWrite64(SETPARAMS, (uint64_t)rxbufq.front().cpl_status | ((uint64_t)PARAM_CMPL_STATUS << 32), DELTACYCLE, node);
+                VWrite64(SETPARAMS, (uint64_t)rxbufq.front().tag        | ((uint64_t)PARAM_CMPL_RX_TAG << 32), DELTACYCLE, node);
 
                 // If a successful completion returned, extract data
                 if (!rxbufq.front().cpl_status)
@@ -763,6 +736,7 @@ void pcieVcInterface::run(void)
 
             case EXTEND_WRITE_OP :
 
+               // Blocking, so wait for something in the write buffer queue
                 while (wrbufq.empty())
                 {
                     SendIdle(1, node);

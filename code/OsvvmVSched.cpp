@@ -232,9 +232,9 @@ VPROC_RTN_TYPE VTrans (VTRANS_PARAMS)
     VPCount              = args[argIdx++];
     VPCountSec           = args[argIdx++];
 
-    VPDataOut_int        = 0; VPDataOut_int  = 0;
+    VPDataOut_int        = 0; VPDataOutHi_int = 0;
     VPDataWidth_int      = 0;
-    VPAddr_int           = 0; VPAddrHi_int   = 0;
+    VPAddr_int           = 0; VPAddrHi_int    = 0;
     VPAddrWidth_int      = 0;
     VPOp_int             = 0;
     VPBurstSize_int      = 0;
@@ -290,7 +290,7 @@ VPROC_RTN_TYPE VTrans (VTRANS_PARAMS)
     if (ns[node]->send_buf.ticks >= DELTA_CYCLE)
     {
         VPDataOut_int   = ((uint32_t*)ns[node]->send_buf.data)[0];
-        VPDataOutHi_int = ((uint32_t*)ns[node]->send_buf.data)[4];
+        VPDataOutHi_int = ((uint32_t*)ns[node]->send_buf.data)[1];
         VPAddr_int      = (uint32_t)((ns[node]->send_buf.addr)       & 0xffffffffULL);
         VPAddrHi_int    = (uint32_t)((ns[node]->send_buf.addr >> 32) & 0xffffffffULL);
         VPOp_int        = ns[node]->send_buf.op;

@@ -128,71 +128,66 @@ public:
     static constexpr int   SETDATAFROMMODEL      =    411;
     static constexpr int   SETBOOLFROMMODEL      =    412;
     static constexpr int   SETINTFROMMODEL       =    413;
-    static constexpr int   POPWDATA              =    414;
-    static constexpr int   PUSHWDATA             =    415;
-    static constexpr int   POPRDATA              =    416;
-    static constexpr int   PUSHRDATA             =    417;
+    static constexpr int   SETPARAMS             =    414;
+    static constexpr int   POPWDATA              =    415;
+    static constexpr int   PUSHWDATA             =    416;
+    static constexpr int   POPRDATA              =    417;
+    static constexpr int   PUSHRDATA             =    418;
 
     static constexpr int   VCOPTIONSTART         =   1000;
     static constexpr int   ENDMODELRUN           =   VCOPTIONSTART;
 
-    static constexpr int   INITDLL               =   1002;
-    static constexpr int   INITPHY               =   1003;
-    static constexpr int   SETRDLCK              =   1004;
-    static constexpr int   SETCMPLRID            =   1005;
-    static constexpr int   SETCMPLCID            =   1006;
-    static constexpr int   SETCMPLRLEN           =   1007;
-    static constexpr int   SETCMPLTAG            =   1008;
-    static constexpr int   SETREQTAG             =   1009;
-    static constexpr int   SETCFGSPC             =   1010;
-    static constexpr int   SETCFGSPCMASK         =   1011;
-    static constexpr int   SETCFGSPCOFFSET       =   1012;
-    static constexpr int   SETMEMADDRLO          =   1013;
-    static constexpr int   SETMEMADDRHI          =   1014;
-    static constexpr int   SETMEMDATA            =   1015;
-    static constexpr int   SETMEMENDIANNESS      =   1016;
+    // SetModelOptions for internal memory
+    static constexpr int   SETCFGSPC             =   1001;
+    static constexpr int   SETCFGSPCMASK         =   1002;
+    static constexpr int   SETCFGSPCOFFSET       =   1003;
+    static constexpr int   SETMEMADDRLO          =   1004;
+    static constexpr int   SETMEMADDRHI          =   1005;
+    static constexpr int   SETMEMDATA            =   1006;
+    static constexpr int   SETMEMENDIANNESS      =   1007;
 
+    static constexpr int   INITDLL               =   1008;
+    static constexpr int   INITPHY               =   1009;
+
+    // GetModelOptions for internal memory backdoor access
     static constexpr int   GETMEMDATA            =   2000;
 
 //  ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^
 // **** If the above values change, also update ../src/PcieVcInterfacePkg.vhd ****
 
+    // Simulator cycle control
     static constexpr int   DELTACYCLE            =     -1;
     static constexpr int   CLOCKEDCYCLE          =      0;
+
+    // Simulation control definitions
+    static constexpr int   FREERUNSIM            =      0;
+    static constexpr int   STOPSIM               =      1;
+    static constexpr int   FINISHSIM             =      2;
+
+    // Generic inputs definitions
     static constexpr int   PIPE_MODE_ENABLED     =      1;
     static constexpr int   PIPE_MODE_DISABLED    =      0;
     static constexpr int   EP_MODE_ENABLED       =      1;
     static constexpr int   EP_MODE_DISABLED      =      0;
     static constexpr int   DIGEST_MODE_ENABLED   =      1;
     static constexpr int   DIGEST_MODE_DISABLED  =      0;
+
+    // Buffer sizes
     static constexpr int   STRBUFSIZE            =    256;
     static constexpr int   DATABUFSIZE           =   4096;
 
-    static constexpr int   FREERUNSIM            =      0;
-    static constexpr int   STOPSIM               =      1;
-    static constexpr int   FINISHSIM             =      2;
-
+    // Completion definitions
     static constexpr int   CMPL_ADDR_MASK        =   0x7c;
-    static constexpr int   CMPL_STATUS_VOID      = 0xffff;
 
+    // Tag generation control definitions
     static constexpr int   TLP_TAG_AUTO          =  0x100;
-    
+
+    // Internal memory endian control definitions
     static constexpr int   LITTLE_ENDIAN         =      1;
     static constexpr int   BIG_ENDIAN            =      0;
-    
-    static constexpr int   PARAM_TRANS_MODE      =      0;
-    static constexpr int   PARAM_RDLCK           =      1;
-    static constexpr int   PARAM_CMPLRID         =      2;
-    static constexpr int   PARAM_CMPLCID         =      3;
-    static constexpr int   PARAM_CMPLRLEN        =      4;
-    static constexpr int   PARAM_CMPLRTAG        =      5;
-    static constexpr int   PARAM_CMPLSTATUS      =      6;
-    static constexpr int   PARAM_REQTAG          =      7;
-    
+
+    // Burst mask definitions
     static constexpr int   BYTE_OFFSET_MASK      =    0x3;
-    
-    static constexpr int   GETLASTCMPLSTATUS     =      0;
-    static constexpr int   GETLASTRXREQTAG       =      1;
 
     // -------------------------------
     // Class type definitions
@@ -237,6 +232,21 @@ public:
         PART_CPL_TRANS
     } pcie_trans_mode_t;
 
+    // MIT parameter definitions
+    typedef enum pcie_params_e
+    {
+      PARAM_TRANS_MODE,
+      PARAM_RDLCK,
+      PARAM_CMPLRID,
+      PARAM_CMPLCID,
+      PARAM_CMPLRLEN,
+      PARAM_CMPLRTAG,
+      PARAM_CMPLSTATUS,
+      PARAM_REQTAG,
+      PARAM_CMPL_STATUS,
+      PARAM_CMPL_RX_TAG
+    } pcie_params_t;
+
     // -------------------------------
     // Public methods
     // -------------------------------
@@ -259,7 +269,6 @@ public:
                     digest_mode      = DIGEST_MODE_DISABLED;
                     cfgspc_offset    = 0;
                     mem_addr         = 0;
-                    last_cpl_status  = CMPL_STATUS_VOID;
 
                     txdatabuf        = new PktData_t[DATABUFSIZE];
                 };
@@ -294,11 +303,8 @@ private:
 
     // Queue for completion RX buffers, for use by input callback
     CplDataBufQueue_t  rxbufq;
-    
-    WrDataBufQueue_t   wrbufq;
 
-    PktData_t          last_cpl_status;
-    PktData_t          last_rx_tag;
+    WrDataBufQueue_t   wrbufq;
 
     // -------------------------------
     // Private methods

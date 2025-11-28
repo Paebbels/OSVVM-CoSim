@@ -112,6 +112,7 @@ public:
     static constexpr int   PIPE_ADDR             =    301;
     static constexpr int   EN_ECRC_ADDR          =    302;
     static constexpr int   INITPHY_ADDR          =    303;
+    static constexpr int   ENABLE_AUTO_ADDR      =    304;
 
     // Transaction interface options address offsets
     static constexpr int   GETNEXTTRANS          =    400;
@@ -151,6 +152,10 @@ public:
 
     // GetModelOptions for internal memory backdoor access
     static constexpr int   GETMEMDATA            =   2000;
+
+    // EXTEND_OP Options
+    static constexpr int   WAIT_FOR_TRANS        =      0;
+    static constexpr int   TRY                   =      1;
 
 //  ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^
 // **** If the above values change, also update ../src/PcieVcInterfacePkg.vhd ****
@@ -198,6 +203,7 @@ public:
 
     // Receive data structure type
     typedef  struct {
+        int       pkt_status;
         PktData_t cpl_status;
         PktData_t tag;
         PktData_t loaddr;
@@ -207,18 +213,52 @@ public:
     // Completion receive data queue type
     typedef std::queue<CplDataBuf_t> CplDataBufQueue_t;
 
-    // Write data structure type
-    typedef  struct {
-        PktData_t tag;
-        uint64_t  addr;
-        unsigned  le;
-        unsigned  fe;
-        uint32_t  byte_length;
-        DataVec_t wrbuf;
-    } WrDataBuf_t;
+    typedef struct {
+      uint8_t  func;
+      uint8_t  dev;
+      uint8_t  bus;
+      uint16_t reg;
+    } bus_dev_func_t;
 
-    // Completion receive data queue type
-    typedef std::queue<WrDataBuf_t> WrDataBufQueue_t;
+    typedef struct{
+        uint8_t fbe;
+        uint8_t lbe;
+    } byte_enable_t;
+
+    typedef union {
+        byte_enable_t be;
+        uint8_t       msgcode;
+    } be_msgcode_t;
+
+    typedef union
+    {
+        uint64_t       addr;
+        bus_dev_func_t bus;
+    }  addr_bus_t;
+
+    // Request data structure type
+    typedef  struct {
+        int          pkt_status;
+        uint16_t     length;
+        PktData_t    tag;
+        uint16_t     rid;
+        uint8_t      type;
+        addr_bus_t   addr_bus;
+        be_msgcode_t be_msg;
+        uint32_t     byte_length;
+        DataVec_t    wrbuf;
+        bool         has_digest;
+        bool         poisoned;
+        uint8_t      attr;
+        uint8_t      AT;
+        uint8_t      cfg_func;
+        uint8_t      cfg_dev;
+        uint8_t      cfg_bus;
+        uint8_t      cfg_reg;
+    } ReqBuf_t;
+
+    // Receive request queue type
+    typedef std::queue<ReqBuf_t> ReqBufQueue_t;
 
 
     // Enumerated type for different TLPs
@@ -232,20 +272,46 @@ public:
         PART_CPL_TRANS
     } pcie_trans_mode_t;
 
-    // MIT parameter definitions
+    // MIT generator parameter definitions
     typedef enum pcie_params_e
     {
-      PARAM_TRANS_MODE,
-      PARAM_RDLCK,
-      PARAM_CMPLRID,
-      PARAM_CMPLCID,
-      PARAM_CMPLRLEN,
-      PARAM_CMPLRTAG,
-      PARAM_CMPLSTATUS,
-      PARAM_REQTAG,
-      PARAM_CMPL_STATUS,
-      PARAM_CMPL_RX_TAG
+        PARAM_TRANS_MODE,
+        PARAM_RDLCK,
+        PARAM_CMPLRID,
+        PARAM_CMPLCID,
+        PARAM_CMPLRLEN,
+        PARAM_CMPLRTAG,
+        PARAM_CMPLSTATUS,
+        PARAM_REQTAG,
+        PARAM_CMPL_STATUS,
+        PARAM_CMPL_RX_TAG,
+        PARAM_PKT_STATUS
     } pcie_params_t;
+
+    // MIT receive request parameter definitions
+    typedef enum pcie_req_params_e
+    {
+        PARAM_REQ_TYPE,
+        PARAM_REQ_TAG,
+        PARAM_REQ_RID,
+        PARAM_REQ_BE_MSGCODE,
+        PARAM_REQ_DIGEST,
+        PARAM_REQ_POISONED,
+        PARAM_REQ_ATTR,
+        PARAM_REQ_AT,
+        PARAM_REQ_FBE,
+        PARAM_REQ_LBE,
+        PARAM_REQ_MSG_CODE,
+        PARAM_REQ_CFG_FUNC,
+        PARAM_REQ_CFG_DEV,
+        PARAM_REQ_CFG_BUS,
+        PARAM_REQ_CFG_REG,
+        PARAM_REQ_LENGTH,
+        PARAM_REQ_BYTE_LEN,
+        PARAM_REQ_PKT_STATUS,
+        PARAM_REQ_ADDR,
+        PARAM_REQ_ADDRHI
+    } pcie_req_params_t;
 
     // -------------------------------
     // Public methods
@@ -276,6 +342,7 @@ public:
     // Run main PCIe VC function
     void        run(void);
 
+
     // Run automatic EP mode
     void        runAutoEp(void);
 
@@ -304,13 +371,14 @@ private:
     // Queue for completion RX buffers, for use by input callback
     CplDataBufQueue_t  rxbufq;
 
-    WrDataBufQueue_t   wrbufq;
+    ReqBufQueue_t      reqbufq;
 
     // -------------------------------
     // Private methods
     // -------------------------------
 
 private:
+
     // *EXAMPLE* Type 0 configuration setup for automatic EP model
     void        ConfigureType0PcieCfg (void);
 

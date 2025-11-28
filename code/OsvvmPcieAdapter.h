@@ -35,5 +35,8 @@
 //
 // =========================================================================
 
+#define BIT7MASK 0x80
+#define BIT6MASK 0x40
+
 uint64_t VWrite64 (uint64_t addr, uint64_t  data, int delta, unsigned int node);
 uint64_t VRead64  (uint64_t addr, uint64_t *data, int delta, unsigned int node);

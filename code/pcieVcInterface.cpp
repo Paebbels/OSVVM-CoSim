@@ -141,6 +141,9 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
         // Create a new entry in the queue for the completion
         rxbufq.push(CplDataBuf_t());
 
+        // Save the packet status
+        rxbufq.back().pkt_status = status;
+
         // Extract the completion status from the packet.
         rxbufq.back().cpl_status = GET_CPL_STATUS(pkt->data);
         rxbufq.back().tag        = GET_CPL_TAG(pkt->data);
@@ -183,22 +186,58 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
             }
         }
     }
-    // Process memory writes
-    else if (tlp_type == TL_MWR32 || tlp_type == TL_MWR64)
+    // Process requests (mem reads, config space, i/o, message)
+    else
     {
         // Create a new entry in the queue for the completion
-        wrbufq.push(WrDataBuf_t());
+        reqbufq.push(ReqBuf_t());
+
+        // Save the packet status
+        reqbufq.back().pkt_status = status;
 
         // Get settings
-        wrbufq.back().byte_length = pkt->ByteCount;
-        wrbufq.back().addr        = GET_TLP_ADDRESS(pkt->data);
-        wrbufq.back().le          = GET_TLP_LBE(pkt->data);
-        wrbufq.back().fe          = GET_TLP_FBE(pkt->data);
-        wrbufq.back().tag         = GET_TLP_TAG(pkt->data);
+        reqbufq.back().byte_length = pkt->ByteCount;
+
+        reqbufq.back().type        = tlp_type;
+        reqbufq.back().length      = GET_TLP_LENGTH(pkt->data);
+        reqbufq.back().tag         = GET_TLP_TAG(pkt->data);
+        reqbufq.back().has_digest  = TLP_HAS_DIGEST(pkt->data);
+        reqbufq.back().poisoned    = pkt->data[TLP_TD_BYTE_OFFSET] & 0x40;
+        reqbufq.back().attr        = (pkt->data[TLP_TD_BYTE_OFFSET] & 0x30) >> 4;
+        reqbufq.back().AT          = (pkt->data[TLP_TD_BYTE_OFFSET] & 0x0c) >> 2;
+        reqbufq.back().rid         = GET_TLP_RID(pkt->data) ;
+
+        // For transaction requests with an address, fetch this from the buffer
+        if (tlp_type == TL_MWR32    || tlp_type == TL_MWR64    ||
+            tlp_type == TL_MRD32    || tlp_type == TL_MRD64    ||
+            tlp_type == TL_MRDLCK32 || tlp_type == TL_MRDLCK64 ||
+            tlp_type == TL_IOWR     || tlp_type == TL_IORD)
+        {
+            reqbufq.back().addr_bus.addr = GET_TLP_ADDRESS(pkt->data);
+        }
+        // For configuration accesses, fetch bus/dev/func numbers and register index
+        else if (tlp_type == TL_CFGRD0 || tlp_type == TL_CFGWR0 ||
+                 tlp_type == TL_CFGRD1 || tlp_type == TL_CFGWR1)
+        {
+            reqbufq.back().addr_bus.bus.func =  pkt->data[CFG_FUN_OFFSET] & 0xf;
+            reqbufq.back().addr_bus.bus.dev  = (pkt->data[CFG_DEV_OFFSET] >> 4) & 0xf;
+            reqbufq.back().addr_bus.bus.bus  =  pkt->data[CFG_BUS_OFFSET] & 0xff;
+            reqbufq.back().addr_bus.bus.reg  =  pkt->data[CFG_REG_OFFSET] & 0xfc;
+        }
+
+        if (tlp_type == TL_MSG  || tlp_type == TL_MSGD)
+        {
+            reqbufq.back().be_msg.msgcode = pkt->data[TLP_BE_OFFSET] & 0xff;
+        }
+        else
+        {
+            reqbufq.back().be_msg.be.fbe = pkt->data[TLP_BE_OFFSET] & 0xf;
+            reqbufq.back().be_msg.be.lbe = (pkt->data[TLP_BE_OFFSET] >> 4) & 0xf;
+        }
 
         if (pkt->ByteCount)
         {
-            wrbufq.back().wrbuf.resize(pkt->ByteCount);
+            reqbufq.back().wrbuf.resize(pkt->ByteCount);
 
             // Get a pointer to the start of the payload data
             pPktData_t payload = GET_TLP_PAYLOAD_PTR(pkt->data);
@@ -206,14 +245,9 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
             // Fetch data into buffer
             for (idx = 0; idx < pkt->ByteCount; idx++)
             {
-                wrbufq.back().wrbuf[idx] = payload[idx];
+                reqbufq.back().wrbuf[idx] = payload[idx];
             }
         }
-    }
-    // Process requests (mem reads, config space, i/o, message)
-    else
-    {
-        // TO DO
     }
 
     // Once input packet is finished with, the allocated space *must* be freed.
@@ -261,53 +295,66 @@ void pcieVcInterface::run(void)
     unsigned           cmplcid;
     unsigned           cmpltag;
     unsigned           localtag;
+    unsigned           enable_auto;
 
-    // Initialise PCIe VHost, with input callback function and no user pointer.
-    pcie->initialisePcie(pcieVcInterface::VUserInput, this);
+    VRead(ENABLE_AUTO_ADDR, &enable_auto, DELTACYCLE, node);
 
-    pcie->getPcieVersionStr(sbuf, STRBUFSIZE);
-    VPrint("  %s\n", sbuf);
-
-    DebugVPrint("pcieVcInterface::run: on node %d\n", node);
-
-    // Fetch the model generics
-    VRead(LANESADDR,    &link_width,  DELTACYCLE, node);
-    VRead(PIPE_ADDR,    &pipe_mode,   DELTACYCLE, node);
-    VRead(EP_ADDR,      &ep_mode,     DELTACYCLE, node);
-    VRead(EN_ECRC_ADDR, &digest_mode, DELTACYCLE, node);
-    VRead(REQID_ADDR,   &rid,         DELTACYCLE, node);
-
-    // When in PIPE mode, disable codec and scrambling
-    if (pipe_mode)
+    if (enable_auto)
     {
-        pcie->configurePcie(CONFIG_DISABLE_SCRAMBLING);
-        pcie->configurePcie(CONFIG_DISABLE_8B10B);
+        runAutoEp();
     }
-
-    // Make sure the link is out of electrical idle
-    VWrite(LINK_STATE, 0, DELTACYCLE, node);
-
-    // Use node number as seed
-    pcie->pcieSeed(node);
-
-    // Send out idles until reset de-asserted
-    do
+    else
     {
-        pcie->sendIdle();
-        VRead(RESET_STATE, &reset_state, CLOCKEDCYCLE, node);
-    } while(reset_state);
+        // Initialise PCIe VHost, with input callback function and no user pointer.
+        pcie->initialisePcie(pcieVcInterface::VUserInput, this);
 
-    // Loop forever, processing commands and driving the PCIe link
-    while (!error && !end)
-    {
-        // Ack transaction
-        VWrite(ACKTRANS, 1, DELTACYCLE, node);
+        // No internal memory or auto-completion
+        pcie->configurePcie(CONFIG_DISABLE_MEM);
+        pcie->configurePcie(CONFIG_DISABLE_UR_CPL);
 
-        // Check if there is a new transaction (delta)
-        VRead(GETNEXTTRANS, &operation, DELTACYCLE, node);
+        pcie->getPcieVersionStr(sbuf, STRBUFSIZE);
+        VPrint("  %s\n", sbuf);
 
-        switch (operation)
+        DebugVPrint("pcieVcInterface::run: on node %d\n", node);
+
+        // Fetch the model generics
+        VRead(LANESADDR,    &link_width,  DELTACYCLE, node);
+        VRead(PIPE_ADDR,    &pipe_mode,   DELTACYCLE, node);
+        VRead(EP_ADDR,      &ep_mode,     DELTACYCLE, node);
+        VRead(EN_ECRC_ADDR, &digest_mode, DELTACYCLE, node);
+        VRead(REQID_ADDR,   &rid,         DELTACYCLE, node);
+
+        // When in PIPE mode, disable codec and scrambling
+        if (pipe_mode)
         {
+            pcie->configurePcie(CONFIG_DISABLE_SCRAMBLING);
+            pcie->configurePcie(CONFIG_DISABLE_8B10B);
+        }
+
+        // Make sure the link is out of electrical idle
+        VWrite(LINK_STATE, 0, DELTACYCLE, node);
+
+        // Use node number as seed
+        pcie->pcieSeed(node);
+
+        // Send out idles until reset de-asserted
+        do
+        {
+            pcie->sendIdle();
+            VRead(RESET_STATE, &reset_state, CLOCKEDCYCLE, node);
+        } while(reset_state);
+
+        // Loop forever, processing commands and driving the PCIe link
+        while (!error && !end)
+        {
+            // Ack transaction
+            VWrite(ACKTRANS, 1, DELTACYCLE, node);
+
+            // Check if there is a new transaction (delta)
+            VRead(GETNEXTTRANS, &operation, DELTACYCLE, node);
+
+            switch (operation)
+            {
 
             case GET_MODEL_OPTIONS :
 
@@ -450,6 +497,7 @@ void pcieVcInterface::run(void)
                         // Non-posted transaction, so do a wait for the status completion
                         pcie->waitForCompletion();
 
+                        VWrite64(SETPARAMS, (uint64_t)rxbufq.front().pkt_status | ((uint64_t)PARAM_PKT_STATUS  << 32), DELTACYCLE, node);
                         VWrite64(SETPARAMS, (uint64_t)rxbufq.front().cpl_status | ((uint64_t)PARAM_CMPL_STATUS << 32), DELTACYCLE, node);
                         VWrite64(SETPARAMS, (uint64_t)rxbufq.front().tag        | ((uint64_t)PARAM_CMPL_RX_TAG << 32), DELTACYCLE, node);
 
@@ -474,6 +522,7 @@ void pcieVcInterface::run(void)
                     // Non-posted transaction, so do a wait for the status completion
                     pcie->waitForCompletion();
 
+                    VWrite64(SETPARAMS, (uint64_t)rxbufq.front().pkt_status | ((uint64_t)PARAM_PKT_STATUS  << 32), DELTACYCLE, node);
                     VWrite64(SETPARAMS, (uint64_t)rxbufq.front().cpl_status | ((uint64_t)PARAM_CMPL_STATUS << 32), DELTACYCLE, node);
                     VWrite64(SETPARAMS, (uint64_t)rxbufq.front().tag        | ((uint64_t)PARAM_CMPL_RX_TAG << 32), DELTACYCLE, node);
 
@@ -583,8 +632,9 @@ void pcieVcInterface::run(void)
                     // Blocking read, so do a wait for the completion
                     pcie->waitForCompletion();
 
-                    VWrite64((uint64_t)SETPARAMS, rxbufq.front().cpl_status | ((uint64_t)PARAM_CMPL_STATUS << 32), DELTACYCLE, node);
-                    VWrite64((uint64_t)SETPARAMS, rxbufq.front().tag        | ((uint64_t)PARAM_CMPL_RX_TAG << 32), DELTACYCLE, node);
+                    VWrite64((uint64_t)SETPARAMS, (uint64_t)rxbufq.front().cpl_status | ((uint64_t)PARAM_CMPL_STATUS << 32), DELTACYCLE, node);
+                    VWrite64((uint64_t)SETPARAMS, (uint64_t)rxbufq.front().tag        | ((uint64_t)PARAM_CMPL_RX_TAG << 32), DELTACYCLE, node);
+                    VWrite64((uint64_t)SETPARAMS, (uint64_t)rxbufq.front().pkt_status | ((uint64_t)PARAM_PKT_STATUS  << 32), DELTACYCLE, node);
 
                     // If a successful completion returned, extract data
                     if (!rxbufq.front().cpl_status)
@@ -701,6 +751,7 @@ void pcieVcInterface::run(void)
                 // Blocking read, so do a wait for the completion
                 pcie->waitForCompletion();
 
+                VWrite64(SETPARAMS, (uint64_t)rxbufq.front().pkt_status | ((uint64_t)PARAM_PKT_STATUS  << 32), DELTACYCLE, node);
                 VWrite64(SETPARAMS, (uint64_t)rxbufq.front().cpl_status | ((uint64_t)PARAM_CMPL_STATUS << 32), DELTACYCLE, node);
                 VWrite64(SETPARAMS, (uint64_t)rxbufq.front().tag        | ((uint64_t)PARAM_CMPL_RX_TAG << 32), DELTACYCLE, node);
 
@@ -734,47 +785,118 @@ void pcieVcInterface::run(void)
                 pcie->waitForCompletion();
                 break;
 
-            case EXTEND_WRITE_OP :
+            case EXTEND_OP :
 
-               // Blocking, so wait for something in the write buffer queue
-                while (wrbufq.empty())
-                {
-                    SendIdle(1, node);
+               VRead(GETOPTIONS,    &option,       DELTACYCLE, node);
+               switch (option)
+               {
+               case WAIT_FOR_TRANS:
+                   // Blocking, so wait for something in the request buffer queue
+                   while (reqbufq.empty())
+                   {
+                       SendIdle(1, node);
+                   }
+                   break;
+                case TRY:
+                    if (reqbufq.empty())
+                    {
+                        VWrite(SETBOOLFROMMODEL, 0, DELTACYCLE, node);
+                    }
+                    else
+                    {
+                        VWrite(SETBOOLFROMMODEL, 1, DELTACYCLE, node);
+                    }
+                    break;
+                default:
+                    break;
                 }
 
+                if (!reqbufq.empty())
+                {
+                    uint32_t tlp_type = reqbufq.front().type;
+
+                    VWrite64(SETPARAMS, (uint64_t)reqbufq.front().pkt_status | ((uint64_t)PARAM_REQ_PKT_STATUS << 32), DELTACYCLE, node);
+                    VWrite64(SETPARAMS, (uint64_t)reqbufq.front().type       | ((uint64_t)PARAM_REQ_TYPE       << 32), DELTACYCLE, node);
+                    VWrite64(SETPARAMS, (uint64_t)reqbufq.front().tag        | ((uint64_t)PARAM_REQ_TAG        << 32), DELTACYCLE, node);
+                    VWrite64(SETPARAMS, (uint64_t)reqbufq.front().rid        | ((uint64_t)PARAM_REQ_RID        << 32), DELTACYCLE, node);
+                    VWrite64(SETPARAMS, (uint64_t)reqbufq.front().has_digest | ((uint64_t)PARAM_REQ_DIGEST     << 32), DELTACYCLE, node);
+                    VWrite64(SETPARAMS, (uint64_t)reqbufq.front().poisoned   | ((uint64_t)PARAM_REQ_POISONED   << 32), DELTACYCLE, node);
+                    VWrite64(SETPARAMS, (uint64_t)reqbufq.front().attr       | ((uint64_t)PARAM_REQ_ATTR       << 32), DELTACYCLE, node);
+                    VWrite64(SETPARAMS, (uint64_t)reqbufq.front().AT         | ((uint64_t)PARAM_REQ_AT         << 32), DELTACYCLE, node);
+
+                    if (tlp_type == TL_MWR32    || tlp_type == TL_MWR64    ||
+                        tlp_type == TL_MRD32    || tlp_type == TL_MRD64    ||
+                        tlp_type == TL_MRDLCK32 || tlp_type == TL_MRDLCK64 ||
+                        tlp_type == TL_IOWR     || tlp_type == TL_IORD)
+                    {
+                        VWrite64(SETPARAMS,  (reqbufq.front().addr_bus.addr        & 0xffffffff) | ((uint64_t)PARAM_REQ_ADDR   << 32), DELTACYCLE, node);
+                        VWrite64(SETPARAMS, ((reqbufq.front().addr_bus.addr >> 32) & 0xffffffff) | ((uint64_t)PARAM_REQ_ADDRHI << 32), DELTACYCLE, node);
+                    }
+                    else
+                    {
+                        VWrite64(SETPARAMS, (uint64_t)reqbufq.front().addr_bus.bus.func | ((uint64_t)PARAM_REQ_CFG_FUNC << 32), DELTACYCLE, node);
+                        VWrite64(SETPARAMS, (uint64_t)reqbufq.front().addr_bus.bus.dev  | ((uint64_t)PARAM_REQ_CFG_DEV  << 32), DELTACYCLE, node);
+                        VWrite64(SETPARAMS, (uint64_t)reqbufq.front().addr_bus.bus.bus  | ((uint64_t)PARAM_REQ_CFG_BUS  << 32), DELTACYCLE, node);
+                        VWrite64(SETPARAMS, (uint64_t)reqbufq.front().addr_bus.bus.reg  | ((uint64_t)PARAM_REQ_CFG_REG  << 32), DELTACYCLE, node);
+                    }
+
+                    if (tlp_type == TL_MSG  || tlp_type == TL_MSGD)
+                    {
+                        VWrite64(SETPARAMS, (uint64_t)reqbufq.front().be_msg.msgcode     | ((uint64_t)PARAM_REQ_MSG_CODE << 32), DELTACYCLE, node);
+                    }
+                    else
+                    {
+                        VWrite64(SETPARAMS, (uint64_t)reqbufq.front().be_msg.be.fbe      | ((uint64_t)PARAM_REQ_FBE << 32), DELTACYCLE, node);
+                        VWrite64(SETPARAMS, (uint64_t)reqbufq.front().be_msg.be.lbe      | ((uint64_t)PARAM_REQ_LBE << 32), DELTACYCLE, node);
+                    }
+
+                    // If there's write data, push to FIFO
+                    VWrite64(SETPARAMS, (uint64_t)reqbufq.front().byte_length | ((uint64_t)PARAM_REQ_BYTE_LEN << 32), DELTACYCLE, node);
+                    if (reqbufq.front().byte_length)
+                    {
+                        for (int byteidx = 0; byteidx < reqbufq.front().byte_length; byteidx++)
+                        {
+                            VWrite(PUSHRDATA, reqbufq.front().wrbuf[byteidx], DELTACYCLE, node);
+                        }
+                    }
+
+                    // Pop trasnaction fro the queue
+                    reqbufq.pop();
+                }
                 break;
 
             default :
                 VPrint("pcieVcInterface::run : ***ERROR. Unrecognised operation (%d)\n", operation);
                 error++;
                 break;
+            }
         }
-    }
 
-    if (error)
-    {
-        VPrint("***Error: pcieVcInterface::run() had an error\n");
-
-        // Send the simulation with an error
-        VWrite(PVH_FATAL, error, 0, node);
-    }
-    else if (end)
-    {
-        if (halt == FINISHSIM)
+        if (error)
         {
-            VWrite(PVH_FINISH, 0, 0, node);
-        }
-        else if (halt == STOPSIM)
-        {
-            VWrite(PVH_STOP, 0, 0, node);
-        }
-    }
+            VPrint("***Error: pcieVcInterface::run() had an error\n");
 
-    // If reached here without stop/finish, send out idles forever
-    // to allow simulation to continue
-    while (true)
-    {
-        pcie->sendIdle(10000);
+            // Send the simulation with an error
+            VWrite(PVH_FATAL, error, 0, node);
+        }
+        else if (end)
+        {
+            if (halt == FINISHSIM)
+            {
+                VWrite(PVH_FINISH, 0, 0, node);
+            }
+            else if (halt == STOPSIM)
+            {
+                VWrite(PVH_STOP, 0, 0, node);
+            }
+        }
+
+        // If reached here without stop/finish, send out idles forever
+        // to allow simulation to continue
+        while (true)
+        {
+            pcie->sendIdle(10000);
+        }
     }
 }
 
@@ -787,6 +909,7 @@ void pcieVcInterface::run(void)
 void pcieVcInterface::runAutoEp()
 {
     unsigned reset_state = 0;
+    unsigned pipe_mode, link_width, init_phy;
 
     // Create an API object for this node
     pcieModelClass* pcie = new pcieModelClass(node);
@@ -794,7 +917,9 @@ void pcieVcInterface::runAutoEp()
     // Initialise PCIe VHost, with input callback function and no user pointer.
     pcie->initialisePcie(pcieVcInterface::VUserInputAutoEp, &node);
 
-    unsigned pipe_mode, link_width, init_phy;
+    // Enable internal memory and auto-completion
+    pcie->configurePcie(CONFIG_ENABLE_MEM);
+    pcie->configurePcie(CONFIG_ENABLE_UR_CPL);
 
     // Fetch configuration status
     VRead(PIPE_ADDR,    &pipe_mode,  pcieVcInterface::DELTACYCLE, node);

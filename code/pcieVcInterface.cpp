@@ -580,19 +580,20 @@ void pcieVcInterface::run(void)
             case READ_DATA :
             case ASYNC_READ_DATA :
 
-                VRead64(GETADDRESS,   &address,    DELTACYCLE, node);
                 VRead64(GETDATAWIDTH, &rdatawidth, DELTACYCLE, node);
-
-                trans_mode = (pcie_trans_mode_t)VWrite(GETPARAMS, PARAM_TRANS_MODE, DELTACYCLE, node);
-
-                localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
-                if (localtag >= 0 && localtag <= TLP_TAG_AUTO)
-                {
-                    tag = localtag;
-                }
 
                 if (operation != READ_DATA && operation != ASYNC_READ_DATA)
                 {
+                    VRead64(GETADDRESS,   &address,    DELTACYCLE, node);
+
+                    trans_mode = (pcie_trans_mode_t)VWrite(GETPARAMS, PARAM_TRANS_MODE, DELTACYCLE, node);
+
+                    localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
+                    if (localtag >= 0 && localtag <= TLP_TAG_AUTO)
+                    {
+                        tag = localtag;
+                    }
+
                     switch(trans_mode)
                     {
                     case MEM_TRANS :

@@ -147,15 +147,16 @@ public:
     static constexpr int   SETMEMDATA            =   1006;
     static constexpr int   SETMEMENDIANNESS      =   1007;
 
-    static constexpr int   INITDLL               =   1008;
-    static constexpr int   INITPHY               =   1009;
-
     // GetModelOptions for internal memory backdoor access
     static constexpr int   GETMEMDATA            =   2000;
 
     // EXTEND_OP Options
     static constexpr int   WAIT_FOR_TRANS        =      0;
     static constexpr int   TRY                   =      1;
+    
+    // EXTEND_DIRECTIVE_OP Options
+    static constexpr int   INITDLL               =      0;
+    static constexpr int   INITPHY               =      1;
 
 //  ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^
 // **** If the above values change, also update ../src/PcieVcInterfacePkg.vhd ****

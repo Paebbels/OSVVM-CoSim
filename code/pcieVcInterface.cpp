@@ -393,17 +393,6 @@ void pcieVcInterface::run(void)
                         halt = int_to_model;
                         break;
 
-                    // Do PHY layer link training initialisation.
-                    case INITPHY:
-                        InitLink(link_width, node);
-                        break;
-
-                    // Do data link layer flow control initialisation
-                    case INITDLL:
-                        // Initialise flow control
-                        pcie->initFc();
-                        break;
-
                     case SETCFGSPCOFFSET:
                         cfgspc_offset = int_to_model;
                         break;
@@ -786,6 +775,32 @@ void pcieVcInterface::run(void)
                 pcie->waitForCompletion();
                 break;
 
+            case EXTEND_DIRECTIVE_OP:
+
+                VRead(GETOPTIONS,    &option,       DELTACYCLE, node);
+                switch(option)
+                {
+                // Do PHY layer link training initialisation.
+                case INITPHY:
+
+                    InitLink(link_width, node);
+                    break;
+
+                // Do data link layer flow control initialisation
+                case INITDLL:
+
+                    // Initialise flow control
+                    pcie->initFc();
+                    break;
+
+                default:
+                    VPrint("pcieVcInterface::run : ***ERROR. Unrecognised EXTEND_DIRECTIVE_OP option (%d)\n", option);
+                    error++;
+                    break;
+                }
+
+                break;
+
             case EXTEND_OP :
 
                VRead(GETOPTIONS,    &option,       DELTACYCLE, node);
@@ -809,6 +824,8 @@ void pcieVcInterface::run(void)
                     }
                     break;
                 default:
+                    VPrint("pcieVcInterface::run : ***ERROR. Unrecognised EXTEND_OP option (%d)\n", option);
+                    error++;
                     break;
                 }
 

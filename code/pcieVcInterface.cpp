@@ -189,6 +189,9 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
     // Process requests (mem reads, config space, i/o, message)
     else
     {
+        // Byte offset into first payload word of the start of data, defaulting to 0
+        uint32_t offset = 0;
+
         // Create a new entry in the queue for the completion
         reqbufq.push(ReqBuf_t());
 
@@ -196,7 +199,6 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
         reqbufq.back().pkt_status = status;
 
         // Get settings
-        reqbufq.back().byte_length = pkt->ByteCount;
 
         reqbufq.back().type        = tlp_type;
         reqbufq.back().length      = GET_TLP_LENGTH(pkt->data);
@@ -208,16 +210,12 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
         reqbufq.back().rid         = GET_TLP_RID(pkt->data) ;
 
         // For transaction requests with an address, fetch this from the buffer
-        if (tlp_type == TL_MWR32    || tlp_type == TL_MWR64    ||
-            tlp_type == TL_MRD32    || tlp_type == TL_MRD64    ||
-            tlp_type == TL_MRDLCK32 || tlp_type == TL_MRDLCK64 ||
-            tlp_type == TL_IOWR     || tlp_type == TL_IORD)
+        if (TLP_HAS_ADDR(tlp_type))
         {
             reqbufq.back().addr_bus.addr = GET_TLP_ADDRESS(pkt->data);
         }
         // For configuration accesses, fetch bus/dev/func numbers and register index
-        else if (tlp_type == TL_CFGRD0 || tlp_type == TL_CFGWR0 ||
-                 tlp_type == TL_CFGRD1 || tlp_type == TL_CFGWR1)
+        else if (TLP_IS_CFGSPC(tlp_type))
         {
             reqbufq.back().addr_bus.bus.func =  pkt->data[CFG_FUN_OFFSET] & 0xf;
             reqbufq.back().addr_bus.bus.dev  = (pkt->data[CFG_DEV_OFFSET] >> 4) & 0xf;
@@ -225,7 +223,7 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
             reqbufq.back().addr_bus.bus.reg  =  pkt->data[CFG_REG_OFFSET] & 0xfc;
         }
 
-        if (tlp_type == TL_MSG  || tlp_type == TL_MSGD)
+        if (TLP_IS_MSG(tlp_type))
         {
             reqbufq.back().be_msg.msgcode = pkt->data[TLP_BE_OFFSET] & 0xff;
         }
@@ -233,17 +231,32 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
         {
             reqbufq.back().be_msg.be.fbe = pkt->data[TLP_BE_OFFSET] & 0xf;
             reqbufq.back().be_msg.be.lbe = (pkt->data[TLP_BE_OFFSET] >> 4) & 0xf;
+
+            if (!TLP_IS_CFGSPC(tlp_type))
+            {
+                // Calculate offset into first word based on FBE
+                offset = (reqbufq.back().be_msg.be.fbe & 0x1) ? 0 :
+                         (reqbufq.back().be_msg.be.fbe & 0x2) ? 1 :
+                         (reqbufq.back().be_msg.be.fbe & 0x4) ? 2 :
+                                                                3;
+
+                // Adjust address for any offset
+                reqbufq.back().addr_bus.addr += offset;
+            }
         }
+
+        reqbufq.back().byte_length = pkt->ByteCount - offset;
+
 
         if (pkt->ByteCount)
         {
             reqbufq.back().wrbuf.resize(pkt->ByteCount);
 
             // Get a pointer to the start of the payload data
-            pPktData_t payload = GET_TLP_PAYLOAD_PTR(pkt->data);
+            pPktData_t payload = GET_TLP_PAYLOAD_PTR(pkt->data) + offset;
 
             // Fetch data into buffer
-            for (idx = 0; idx < pkt->ByteCount; idx++)
+            for (idx = 0; idx < reqbufq.back().byte_length; idx++)
             {
                 reqbufq.back().wrbuf[idx] = payload[idx];
             }
@@ -362,7 +375,7 @@ void pcieVcInterface::run(void)
                 switch (option)
                 {
                 case GETMEMDATA:
-                    memword = pcie->readRamWord(mem_addr, LITTLE_ENDIAN);
+                    memword = pcie->readRamWord(mem_addr, LITTLE_END);
                     mem_addr += 4;
                     VWrite(SETINTFROMMODEL, memword, DELTACYCLE, node);
                     break;
@@ -412,7 +425,7 @@ void pcieVcInterface::run(void)
                         break;
 
                     case SETMEMENDIANNESS:
-                        endian_mode = int_to_model ? LITTLE_ENDIAN : BIG_ENDIAN;
+                        endian_mode = int_to_model ? LITTLE_END : BIG_END;
                         break;
 
                     case SETMEMADDRLO:
@@ -424,7 +437,7 @@ void pcieVcInterface::run(void)
                         break;
 
                     case SETMEMDATA:
-                        pcie->writeRamWord(mem_addr, (uint32_t)int_to_model, LITTLE_ENDIAN);
+                        pcie->writeRamWord(mem_addr, (uint32_t)int_to_model, LITTLE_END);
                         mem_addr += 4;
                         break;
 
@@ -468,7 +481,7 @@ void pcieVcInterface::run(void)
                     break;
 
                 case MSG_TRANS :
-                    if (ASYNC_WRITE_ADDRESS)
+                    if (operation == ASYNC_WRITE_ADDRESS)
                     {
                         pcie->message(address, txdatabuf, wdatawidth/8, tag++, rid, false, digest_mode);
                     }
@@ -532,16 +545,26 @@ void pcieVcInterface::run(void)
                     rd_lck        = VWrite(GETPARAMS, PARAM_RDLCK,      DELTACYCLE, node);
                     status        = VWrite(GETPARAMS, PARAM_CMPLSTATUS, DELTACYCLE, node);
 
-                    be            = CalcBe(address, wdatawidth/8);
-                    word_len      = CalcWordCount(wdatawidth/8, be);
-
-                    if (trans_mode == CPL_TRANS)
+                    if (operation == ASYNC_WRITE_ADDRESS)
                     {
-                        remaining_len = word_len;
+                        be            = 0;
+                        word_len      = 0;
+                        remaining_len = 0;
                     }
                     else
                     {
-                        remaining_len = VWrite(GETPARAMS, PARAM_CMPLRLEN,   DELTACYCLE, node);
+
+                        be            = CalcBe(address, wdatawidth/8);
+                        word_len      = CalcWordCount(wdatawidth/8, be);
+
+                        if (trans_mode == CPL_TRANS)
+                        {
+                            remaining_len = word_len;
+                        }
+                        else
+                        {
+                            remaining_len = VWrite(GETPARAMS, PARAM_CMPLRLEN,   DELTACYCLE, node);
+                        }
                     }
 
                     // Do a completion (effectively posted, so nothing to wait for)
@@ -842,10 +865,7 @@ void pcieVcInterface::run(void)
                     VWrite64(SETPARAMS, (uint64_t)reqbufq.front().attr       | ((uint64_t)PARAM_REQ_ATTR       << 32), DELTACYCLE, node);
                     VWrite64(SETPARAMS, (uint64_t)reqbufq.front().AT         | ((uint64_t)PARAM_REQ_AT         << 32), DELTACYCLE, node);
 
-                    if (tlp_type == TL_MWR32    || tlp_type == TL_MWR64    ||
-                        tlp_type == TL_MRD32    || tlp_type == TL_MRD64    ||
-                        tlp_type == TL_MRDLCK32 || tlp_type == TL_MRDLCK64 ||
-                        tlp_type == TL_IOWR     || tlp_type == TL_IORD)
+                    if (TLP_HAS_ADDR(tlp_type))
                     {
                         VWrite64(SETPARAMS,  (reqbufq.front().addr_bus.addr        & 0xffffffff) | ((uint64_t)PARAM_REQ_ADDR   << 32), DELTACYCLE, node);
                         VWrite64(SETPARAMS, ((reqbufq.front().addr_bus.addr >> 32) & 0xffffffff) | ((uint64_t)PARAM_REQ_ADDRHI << 32), DELTACYCLE, node);
@@ -858,7 +878,7 @@ void pcieVcInterface::run(void)
                         VWrite64(SETPARAMS, (uint64_t)reqbufq.front().addr_bus.bus.reg  | ((uint64_t)PARAM_REQ_CFG_REG  << 32), DELTACYCLE, node);
                     }
 
-                    if (tlp_type == TL_MSG  || tlp_type == TL_MSGD)
+                    if (TLP_IS_MSG(tlp_type))
                     {
                         VWrite64(SETPARAMS, (uint64_t)reqbufq.front().be_msg.msgcode     | ((uint64_t)PARAM_REQ_MSG_CODE << 32), DELTACYCLE, node);
                     }
@@ -869,16 +889,18 @@ void pcieVcInterface::run(void)
                     }
 
                     // If there's write data, push to FIFO
+                    VWrite64(SETPARAMS, (uint64_t)reqbufq.front().length      | ((uint64_t)PARAM_REQ_LENGTH   << 32), DELTACYCLE, node);
                     VWrite64(SETPARAMS, (uint64_t)reqbufq.front().byte_length | ((uint64_t)PARAM_REQ_BYTE_LEN << 32), DELTACYCLE, node);
-                    if (reqbufq.front().byte_length)
+
+                    if (TLP_HAS_DATA(tlp_type) && reqbufq.front().byte_length)
                     {
-                        for (int byteidx = 0; byteidx < reqbufq.front().byte_length; byteidx++)
+                        for (int byteidx = 0; byteidx < (reqbufq.front().byte_length); byteidx++)
                         {
                             VWrite(PUSHRDATA, reqbufq.front().wrbuf[byteidx], DELTACYCLE, node);
                         }
                     }
 
-                    // Pop trasnaction fro the queue
+                    // Pop transaction from the queue
                     reqbufq.pop();
                 }
                 break;

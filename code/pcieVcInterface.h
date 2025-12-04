@@ -62,6 +62,32 @@ extern "C" {
 #endif
 
 // -------------------------------------------------------------------------
+// Help macros
+// -------------------------------------------------------------------------
+
+#define TLP_HAS_ADDR(_tlp_type) (                            \
+    _tlp_type == TL_MWR32    || _tlp_type == TL_MWR64    ||  \
+    _tlp_type == TL_MRD32    || _tlp_type == TL_MRD64    ||  \
+    _tlp_type == TL_MRDLCK32 || _tlp_type == TL_MRDLCK64 ||  \
+    _tlp_type == TL_IOWR     || _tlp_type == TL_IORD         \
+)
+
+#define TLP_IS_MSG(_tlp_type) (                              \
+    _tlp_type == TL_MSG  || _tlp_type == TL_MSGD             \
+)
+
+#define TLP_IS_CFGSPC(_tlp_type) (                           \
+    _tlp_type == TL_CFGRD0 || _tlp_type == TL_CFGWR0 ||      \
+    _tlp_type == TL_CFGRD1 || _tlp_type == TL_CFGWR1         \
+)
+
+#define TLP_HAS_DATA(_tlp_type) (                            \
+    _tlp_type == TL_MWR32  || _tlp_type == TL_MWR64   ||     \
+    _tlp_type == TL_CFGWR0 || _tlp_type == TL_CFGWR1  ||     \
+    _tlp_type == TL_IOWR   || _tlp_type == TL_MSGD           \
+)
+
+// -------------------------------------------------------------------------
 // Class definition
 // -------------------------------------------------------------------------
 
@@ -153,7 +179,7 @@ public:
     // EXTEND_OP Options
     static constexpr int   WAIT_FOR_TRANS        =      0;
     static constexpr int   TRY                   =      1;
-    
+
     // EXTEND_DIRECTIVE_OP Options
     static constexpr int   INITDLL               =      0;
     static constexpr int   INITPHY               =      1;
@@ -189,8 +215,8 @@ public:
     static constexpr int   TLP_TAG_AUTO          =  0x100;
 
     // Internal memory endian control definitions
-    static constexpr int   LITTLE_ENDIAN         =      1;
-    static constexpr int   BIG_ENDIAN            =      0;
+    static constexpr int   LITTLE_END            =      1;
+    static constexpr int   BIG_END               =      0;
 
     // Burst mask definitions
     static constexpr int   BYTE_OFFSET_MASK      =    0x3;
@@ -332,7 +358,7 @@ public:
                     rid              = node;
                     pipe_mode        = PIPE_MODE_DISABLED;
                     ep_mode          = EP_MODE_DISABLED;
-                    endian_mode      = LITTLE_ENDIAN;
+                    endian_mode      = LITTLE_END;
                     digest_mode      = DIGEST_MODE_DISABLED;
                     cfgspc_offset    = 0;
                     mem_addr         = 0;

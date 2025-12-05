@@ -65,26 +65,26 @@ extern "C" {
 // Help macros
 // -------------------------------------------------------------------------
 
-#define TLP_HAS_ADDR(_tlp_type) (                            \
-    _tlp_type == TL_MWR32    || _tlp_type == TL_MWR64    ||  \
-    _tlp_type == TL_MRD32    || _tlp_type == TL_MRD64    ||  \
-    _tlp_type == TL_MRDLCK32 || _tlp_type == TL_MRDLCK64 ||  \
-    _tlp_type == TL_IOWR     || _tlp_type == TL_IORD         \
+#define TLP_HAS_ADDR(_tlp_type) (                                    \
+    _tlp_type == TL_MWR32    || _tlp_type == TL_MWR64    ||          \
+    _tlp_type == TL_MRD32    || _tlp_type == TL_MRD64    ||          \
+    _tlp_type == TL_MRDLCK32 || _tlp_type == TL_MRDLCK64 ||          \
+    _tlp_type == TL_IOWR     || _tlp_type == TL_IORD                 \
 )
 
-#define TLP_IS_MSG(_tlp_type) (                              \
-    _tlp_type == TL_MSG  || _tlp_type == TL_MSGD             \
+#define TLP_IS_MSG(_tlp_type) (                                      \
+    (_tlp_type & 0xf8) == TL_MSG  || (_tlp_type & 0xf8) == TL_MSGD   \
 )
 
-#define TLP_IS_CFGSPC(_tlp_type) (                           \
-    _tlp_type == TL_CFGRD0 || _tlp_type == TL_CFGWR0 ||      \
-    _tlp_type == TL_CFGRD1 || _tlp_type == TL_CFGWR1         \
+#define TLP_IS_CFGSPC(_tlp_type) (                                   \
+    _tlp_type == TL_CFGRD0 || _tlp_type == TL_CFGWR0 ||              \
+    _tlp_type == TL_CFGRD1 || _tlp_type == TL_CFGWR1                 \
 )
 
-#define TLP_HAS_DATA(_tlp_type) (                            \
-    _tlp_type == TL_MWR32  || _tlp_type == TL_MWR64   ||     \
-    _tlp_type == TL_CFGWR0 || _tlp_type == TL_CFGWR1  ||     \
-    _tlp_type == TL_IOWR   || _tlp_type == TL_MSGD           \
+#define TLP_HAS_DATA(_tlp_type) (                                    \
+    _tlp_type == TL_MWR32  || _tlp_type          == TL_MWR64   ||    \
+    _tlp_type == TL_CFGWR0 || _tlp_type          == TL_CFGWR1  ||    \
+    _tlp_type == TL_IOWR   || (_tlp_type & 0xf8) == TL_MSGD          \
 )
 
 // -------------------------------------------------------------------------

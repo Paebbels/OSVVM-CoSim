@@ -190,7 +190,8 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
     else
     {
         // Byte offset into first payload word of the start of data, defaulting to 0
-        uint32_t offset = 0;
+        uint32_t offset  = 0;
+        uint32_t padding = 0;
 
         // Create a new entry in the queue for the completion
         reqbufq.push(ReqBuf_t());
@@ -240,13 +241,19 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
                          (reqbufq.back().be_msg.be.fbe & 0x4) ? 2 :
                                                                 3;
 
+                // Calculate number padded bytes at end of data
+                padding = (reqbufq.back().be_msg.be.lbe == 0x1) ? 3 :
+                          (reqbufq.back().be_msg.be.lbe == 0x3) ? 2 :
+                          (reqbufq.back().be_msg.be.lbe == 0x7) ? 1 :
+                                                                  0;
+
                 // Adjust address for any offset
                 reqbufq.back().addr_bus.addr += offset;
             }
         }
 
-        reqbufq.back().byte_length = pkt->ByteCount - offset;
 
+        reqbufq.back().byte_length = pkt->ByteCount - offset - padding;
 
         if (pkt->ByteCount)
         {
@@ -458,8 +465,9 @@ void pcieVcInterface::run(void)
                 trans_mode = (pcie_trans_mode_t)VWrite(GETPARAMS, PARAM_TRANS_MODE, DELTACYCLE, node);
 
                 localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
-                if (localtag >= 0 && localtag <= TLP_TAG_AUTO)
+                if (localtag >= 0 && localtag < TLP_TAG_AUTO && trans_mode != CPL_TRANS && trans_mode != PART_CPL_TRANS)
                 {
+                    VPrint("=====>run(): Writes: tag = %d localtag = %d trans_mode = %d\n", tag, localtag, trans_mode);
                     tag = localtag;
                 }
 
@@ -481,7 +489,7 @@ void pcieVcInterface::run(void)
                     break;
 
                 case MSG_TRANS :
-                    if (operation == ASYNC_WRITE_ADDRESS)
+                    if (operation != ASYNC_WRITE_ADDRESS)
                     {
                         pcie->message(address, txdatabuf, wdatawidth/8, tag++, rid, false, digest_mode);
                     }
@@ -601,8 +609,9 @@ void pcieVcInterface::run(void)
                     trans_mode = (pcie_trans_mode_t)VWrite(GETPARAMS, PARAM_TRANS_MODE, DELTACYCLE, node);
 
                     localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
-                    if (localtag >= 0 && localtag <= TLP_TAG_AUTO)
+                    if (localtag >= 0 && localtag < TLP_TAG_AUTO)
                     {
+                        VPrint("=====>run(): Reads: tag = %d localtag = %d trans_mode = %d\n", tag, localtag, trans_mode);
                         tag = localtag;
                     }
 
@@ -682,8 +691,9 @@ void pcieVcInterface::run(void)
                 trans_mode = (pcie_trans_mode_t)VWrite(GETPARAMS, PARAM_TRANS_MODE, DELTACYCLE, node);
 
                 localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
-                if (localtag >= 0 && localtag <= TLP_TAG_AUTO)
+                if (localtag >= 0 && localtag < TLP_TAG_AUTO && trans_mode != CPL_TRANS && trans_mode != PART_CPL_TRANS)
                 {
+                    VPrint("=====>run(): WriteBursts: tag = %d localtag = %d trans_mode = %d\n", tag, localtag, trans_mode);
                     tag = localtag;
                 }
 
@@ -754,8 +764,9 @@ void pcieVcInterface::run(void)
                 rd_lck        = VWrite(GETPARAMS, PARAM_RDLCK, DELTACYCLE, node);
 
                 localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
-                if (localtag >= 0 && localtag <= TLP_TAG_AUTO)
+                if (localtag >= 0 && localtag < TLP_TAG_AUTO)
                 {
+                    VPrint("=====>run(): ReadBursts: tag = %d localtag = %d trans_mode = %d\n", tag, localtag, trans_mode);
                     tag = localtag;
                 }
 

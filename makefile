@@ -136,13 +136,13 @@ VULIB              = $(TESTDIR)/libvuser.a
 
 # Set OS specific variables between Linux and Windows (MinGW)
 ifeq ($(OSTYPE), Linux)
-  CFLAGS_SO        = -shared -lpthread -lrt -rdynamic
+  CFLAGS_SO        = -shared -lpthread -lrt -rdynamic 
   CPPSTD           = -std=c++11
-  WLIB             =
+  WLIB             = 
 else
   CFLAGS_SO        = -shared -Wl,-export-all-symbols
   CPPSTD           =
-  WLIB             = -lWs2_32 -l:vproc.$(VPROCLIBSUFFIX)
+  WLIB             = -lWs2_32
 endif
 
 # Define the maximum number of supported VProcs in the compile pli library
@@ -225,6 +225,7 @@ $(VUSER_PLI): $(VULIB) $(RV32TEST)
             -L$(TESTDIR) -lvuser                        \
             -Wl,-no-whole-archive                       \
             $(WLIB)                                     \
+            -L$(CURDIR) -l:VProc.$(VPROCLIBSUFFIX)      \
             -ldl                                        \
             -o $@
 

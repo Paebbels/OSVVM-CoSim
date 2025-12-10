@@ -467,7 +467,6 @@ void pcieVcInterface::run(void)
                 localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
                 if (localtag >= 0 && localtag < TLP_TAG_AUTO && trans_mode != CPL_TRANS && trans_mode != PART_CPL_TRANS)
                 {
-                    VPrint("=====>run(): Writes: tag = %d localtag = %d trans_mode = %d\n", tag, localtag, trans_mode);
                     tag = localtag;
                 }
 
@@ -611,7 +610,6 @@ void pcieVcInterface::run(void)
                     localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
                     if (localtag >= 0 && localtag < TLP_TAG_AUTO)
                     {
-                        VPrint("=====>run(): Reads: tag = %d localtag = %d trans_mode = %d\n", tag, localtag, trans_mode);
                         tag = localtag;
                     }
 
@@ -693,7 +691,6 @@ void pcieVcInterface::run(void)
                 localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
                 if (localtag >= 0 && localtag < TLP_TAG_AUTO && trans_mode != CPL_TRANS && trans_mode != PART_CPL_TRANS)
                 {
-                    VPrint("=====>run(): WriteBursts: tag = %d localtag = %d trans_mode = %d\n", tag, localtag, trans_mode);
                     tag = localtag;
                 }
 
@@ -766,7 +763,6 @@ void pcieVcInterface::run(void)
                 localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
                 if (localtag >= 0 && localtag < TLP_TAG_AUTO)
                 {
-                    VPrint("=====>run(): ReadBursts: tag = %d localtag = %d trans_mode = %d\n", tag, localtag, trans_mode);
                     tag = localtag;
                 }
 

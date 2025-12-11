@@ -220,6 +220,8 @@ public:
 
     // Burst mask definitions
     static constexpr int   BYTE_OFFSET_MASK      =    0x3;
+    
+    static constexpr int   MAX_TAG               =    256;
 
     // -------------------------------
     // Class type definitions
@@ -362,6 +364,7 @@ public:
                     digest_mode      = DIGEST_MODE_DISABLED;
                     cfgspc_offset    = 0;
                     mem_addr         = 0;
+                    tag              = 0;
 
                     txdatabuf        = new PktData_t[DATABUFSIZE];
                 };

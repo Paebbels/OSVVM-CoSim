@@ -372,6 +372,12 @@ void pcieVcInterface::run(void)
 
             // Check if there is a new transaction (delta)
             VRead(GETNEXTTRANS, &operation, DELTACYCLE, node);
+            
+            // Make sure the tag is at a valid value                
+            if (tag >= MAX_TAG)
+            {
+                tag = 0;
+            }
 
             switch (operation)
             {
@@ -467,7 +473,7 @@ void pcieVcInterface::run(void)
                 localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
                 if (localtag >= 0 && localtag < TLP_TAG_AUTO && trans_mode != CPL_TRANS && trans_mode != PART_CPL_TRANS)
                 {
-                    tag = localtag;
+                    tag = localtag & (MAX_TAG-1);
                 }
 
                 // For completions, the data bytes will start at an offset into the first word, determined
@@ -610,7 +616,7 @@ void pcieVcInterface::run(void)
                     localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
                     if (localtag >= 0 && localtag < TLP_TAG_AUTO)
                     {
-                        tag = localtag;
+                        tag = localtag & (MAX_TAG-1);
                     }
 
                     switch(trans_mode)
@@ -691,7 +697,7 @@ void pcieVcInterface::run(void)
                 localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
                 if (localtag >= 0 && localtag < TLP_TAG_AUTO && trans_mode != CPL_TRANS && trans_mode != PART_CPL_TRANS)
                 {
-                    tag = localtag;
+                    tag = localtag & (MAX_TAG-1);
                 }
 
                 // For completions, the data bytes will start at an offset into the first word, determined
@@ -763,7 +769,7 @@ void pcieVcInterface::run(void)
                 localtag = VWrite(GETPARAMS, PARAM_REQTAG, DELTACYCLE, node);
                 if (localtag >= 0 && localtag < TLP_TAG_AUTO)
                 {
-                    tag = localtag;
+                    tag = localtag & (MAX_TAG-1);
                 }
 
                 pcie->memReadLockDigest(address, rdatawidth, tag++, rid, rd_lck, digest_mode, false);

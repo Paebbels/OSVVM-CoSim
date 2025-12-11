@@ -7,17 +7,18 @@
 #
 #
 #  Description:
-#        Script to run Axi4 Lite co-sim API test  
+#        Script to run co-simulation API test  
 #
 #  Revision History:
 #    Date      Version   Description
+#    12/2025   ????.??   Adde PCIe tests
 #    01/2023   2023.01   Relocated testbenches to be under CoSim
 #    10/2022             Compile Script for OSVVM co-sim
 #
 #
 #  This file is part of OSVVM.
 #  
-#  Copyright (c) 2022 by [OSVVM Authors](AUTHORS.md)  
+#  Copyright (c) 2022 - 2025 by [OSVVM Authors](AUTHORS.md)  
 #  
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -31,6 +32,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
+
+# Analyze PCIe testbench and run tests on it
+include  ../PCIe/testbench
+include  ../PCIe/testbench/tests.pro
 
 # Analyze Axi4Lite testbench and run tests on it
 include  ./testbench/TbAxi4Lite
@@ -61,9 +66,10 @@ include  ./testbench/TbDpRam/tests.pro
 include ./testbench/TbEthernet
 include ./testbench/TestCases_Ethernet
 
-# Analyze UART testbench and run tests on it
-include ./testbench/TbUart
-include ./testbench/TestCases_Uart
+# Doesn't do any self-checks
+# # Analyze UART testbench and run tests on it
+# include ./testbench/TbUart
+# include ./testbench/TestCases_Uart
 
 # Analyse AxiStream testbench and run tests on it
 include ./testbench/TbAxi4Stream

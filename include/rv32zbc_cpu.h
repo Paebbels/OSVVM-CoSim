@@ -16,7 +16,7 @@
 //
 //  Revision History:
 //    Date      Version    Description
-//    09/2025   ????       Update model to v1.2.9
+//    09/2025   ????.??    Update model to v1.3.1
 //
 //  This file is part of OSVVM.
 //

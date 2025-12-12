@@ -2,18 +2,22 @@
 
 | Revision  |  Release Summary | 
 ------------|----------- 
-| ????.??   | Added VIrq CoSim procedure
-|           | Updated rv32 RISC-V ISS to v1.2.9
-|           | Added the inclusion of the PCIe C model to CoSim library compilation
+| ????.??   | Added the inclusion of the PCIe C model to CoSim library compilation
+|           | Changes in suppiort of PCIe VC
+|           | Added VIrq CoSim procedure
+|           | Updated rv32 RISC-V ISS to v1.3.1
 | 2024.07   | Updated calls to CreateClock for it being moved to ClockResetPkg
 | 2023.??   | Updates to RISC-V ISS libraries and headers for FreeRTOS support
 | 2023.05   | Support for split transactions, responder, streaming and checking
 | 2023.01   | Initial release
 
-## ????.?? September 2025
+## ????.?? December 2025
+- Added the inclusion of the PCIe C model to CoSim library compilation.
+  These new libraries exits in `PCIe/lib`, with headers in `PCIe/include`
+- Changes in suppot of PCIe VC, including adding support for `SetModelOptions` and `GetModelOptions`
 - Added a `VIrq` co-simulation procedure, wrapped in a new `CoSimIrq` VHDL procedure,
   to raise interrupt independent of `CoSimTrans`
-- The rv32 RISC-V instruction set simulator library is updated to verion 1.2.9. New features include:
+- The rv32 RISC-V instruction set simulator library is updated to verion 1.3.1. New features include:
   - API access to internal cycle count
   - Registering of callback function on unimplemented instruction
   - Internal timing model configurable over API
@@ -21,8 +25,6 @@
   - Support for RV32B standard extensions (Zba, Zbb and Zbs)
   - Support for RV32_Zbc standard extension
   - Reading of binary program in addition to ELF support
-- Added the inclusion of the PCIe C model to CoSim library compilation.
-  These new libraries exits in `PCIe/lib`
 
 
 ## 2024.07 July 2024

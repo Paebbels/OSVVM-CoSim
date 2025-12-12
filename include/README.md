@@ -2,7 +2,7 @@
 # The _rv32_ RISC-V ISS Model
 
 The include files in this folder are an abbreviated set of headers for using
-the librv32[xxx].a libraries containing the RISC-V RV32 ISS. The full source
+the `librv32[xxx].a` libraries containing the RISC-V RV32 ISS. The full source
 code and [documentation](https://github.com/wyvernSemi/riscV/blob/main/iss/doc/iss_manual.pdf)
 is available on github at:
 

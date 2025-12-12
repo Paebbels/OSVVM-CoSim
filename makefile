@@ -12,11 +12,12 @@
 #
 #  Revision History:
 #    Date      Version    Description
+#    12/2025   ????.??    Fix for NVC linking of VProc.so
 #    10/2022   2023.01    Initial version
 #
 #  This file is part of OSVVM.
 #
-#  Copyright (c) 2022 by [OSVVM Authors](AUTHORS.md)
+#  Copyright (c) 2022 - 2025 by [OSVVM Authors](AUTHORS.md)
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.

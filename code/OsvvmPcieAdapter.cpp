@@ -14,7 +14,7 @@
 //
 //  Revision History:
 //    Date      Version    Description
-//    07/2025   2025.??    Initial revision
+//    07/2025   ????.??    Initial revision
 //
 //
 //  This file is part of OSVVM.

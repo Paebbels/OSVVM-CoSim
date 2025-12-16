@@ -48,8 +48,8 @@
 USRCDIR            = usercode
 OPDIR              = .
 USRFLAGS           =
-SIM                = ModelSim
-ALDECDIR         =  /c/Aldec/Riviera-PRO-2025.07-x64
+SIM                =
+ALDECDIR           =  /c/Aldec/Riviera-PRO-2025.07-x64
 
 # Derived directory locations
 SRCDIR             = code
@@ -80,9 +80,7 @@ OSTYPE:=$(shell uname)
 
 TOOLFLAGS          = -m64
 
-ifeq ("${SIM}", "QuestaSim")
-  TOOLFLAGS        += -DSIEMENS
-else ifeq ("${SIM}", "RivieraPRO")
+ifeq ("${SIM}", "RivieraPRO")
   ALDECDIR         =  /c/Aldec/Riviera-PRO-2022.10-x64
   TOOLFLAGS        += -DALDEC -I${ALDECDIR}/interfaces/include
   ifeq (${OSTYPE}, Linux)
@@ -96,6 +94,8 @@ else ifeq ("${SIM}", "NVC")
   TOOLFLAGS        += -DNVC
 else ifeq ("${SIM}", "ModelSim")
   TOOLFLAGS        = -m32 -DSIEMENS
+else
+  TOOLFLAGS        += -DSIEMENS
 endif
 
 RV32EXE            = test.exe

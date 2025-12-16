@@ -42,14 +42,14 @@ namespace eval ::osvvm {
 #
 # -------------------------------------------------------------------------
 
-proc gen_lib_flags {libname} {
+proc gen_lib_flags {libname sim} {
 
   # Get the OS that we are running on
   # set osname [string tolower [exec uname]]
   set osname $::osvvm::OperatingSystemName
 
   # Select the RISC-V ISS library required
-  if {$::osvvm::ToolName ne "ModelSim" } {
+  if {$sim ne "ModelSim" } {
     if {"$osname" eq "linux"} {
       set rvlib ${libname}x64
     } else {
@@ -83,44 +83,65 @@ proc mk_vproc_common {testname libname} {
 
   # Get the OS that we are running on
   set osname $::osvvm::OperatingSystemName
+  set sim    $::osvvm::ToolName
 
   # Default of no additional vendor specific flags
   set vendorflags "DUMMY="
-  
+
   # Default to using the normal makefile
   set mkfilearg "makefile"
-  
+
   # When an ALDEC simulator ...
-  if {($::osvvm::ToolName eq "ActiveHDL") || ($::osvvm::ToolName eq "RivieraPRO") } {
+  if {($sim eq "ActiveHDL") || ($sim eq "RivieraPRO") } {
     # If ActiveHDL, the choose its own makefile
-    if {($::osvvm::ToolName eq "ActiveHDL")} {
+    if {($sim eq "ActiveHDL")} {
       set mkfilearg "makefile.avhdl"
     }
-    
+
     # Ensure the correct path to the ALDEC tools
     if {"$osname" eq "linux"} {
       set aldecpath [file normalize [info nameofexecutable]/../../..]
     } else {
       set aldecpath [file normalize [info nameofexecutable]/../..]
     }
-    
+
     set vendorflags "ALDECDIR=${aldecpath}"
+
+  # If not the remaining non-Siemens tools, determine whether the
+  # simulation is an 32- or 64-bit simulation
+  } elseif {("$sim" != "NVC") && ("$sim" != "GHDL")} {
+
+    if {"$osname" eq "linux"} {
+      # Extract executable type (32-bit or 64-bit) using "file" on executable
+      set exectype [lindex [split [exec file [info nameofexecutable]]] 2]
+
+    } else {
+      # Extract executable type (PE32 or PE32+) using "file" on executable
+      set exectype [lindex [split [exec file [info nameofexecutable]]] 1]
+    }
+
+    # If Siemens executable is 64-bit, set simulator for QuestaSim (which is
+    # also good for 64-bit ModelSim SE as well), else assume 32-bit ModelSim
+    if {("$exectype" eq "PE32+") || ("$exectype" eq "64-bit")} {
+      set sim   "QuestaSim"
+    } else {
+      set sim   "ModelSim"
+    }
   }
 
-  set flags [ gen_lib_flags ${libname} ]
-  
+  set flags [ gen_lib_flags ${libname} ${sim} ]
+
   if {$::osvvm::Supports2019Integer64Bits} {
     set flags "$flags -DVHDLINTEGER64"
   }
 
   exec make --no-print-directory -C $::osvvm::OsvvmCoSimDirectory \
             -f $mkfilearg                                         \
-            SIM=$::osvvm::ToolName                                \
+            SIM=$sim                                              \
             USRCDIR=$testname                                     \
             OPDIR=$::osvvm::CurrentSimulationDirectory            \
             USRFLAGS=${flags}                                     \
             $vendorflags
-
 }
 
 # -------------------------------------------------------------------------
@@ -216,7 +237,7 @@ proc MkVprocGhdlMain {testname {libname ""} } {
 
   exec make -f $::osvvm::OsvvmCoSimDirectory/makefile.ghdl clean
 
-  set flags [ gen_lib_flags ${libname} ]
+  set flags [ gen_lib_flags ${libname} $::osvvm::ToolName ]
 
   exec make -f $::osvvm::OsvvmCoSimDirectory/makefile.ghdl                   \
             USRFLAGS=${flags}                                                \

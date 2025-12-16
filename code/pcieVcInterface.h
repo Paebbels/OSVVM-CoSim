@@ -312,9 +312,9 @@ public:
         PARAM_CMPLRTAG,
         PARAM_CMPLSTATUS,
         PARAM_REQTAG,
+        PARAM_PKT_STATUS,
         PARAM_CMPL_STATUS,
-        PARAM_CMPL_RX_TAG,
-        PARAM_PKT_STATUS
+        PARAM_CMPL_RX_TAG
     } pcie_params_t;
 
     // MIT receive request parameter definitions

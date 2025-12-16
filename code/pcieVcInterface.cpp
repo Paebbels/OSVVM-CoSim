@@ -372,8 +372,8 @@ void pcieVcInterface::run(void)
 
             // Check if there is a new transaction (delta)
             VRead(GETNEXTTRANS, &operation, DELTACYCLE, node);
-            
-            // Make sure the tag is at a valid value                
+
+            // Make sure the tag is at a valid value
             if (tag >= MAX_TAG)
             {
                 tag = 0;
@@ -659,12 +659,13 @@ void pcieVcInterface::run(void)
                     pcie->waitForCompletion();
 
                     VWrite64((uint64_t)SETPARAMS, (uint64_t)rxbufq.front().cpl_status | ((uint64_t)PARAM_CMPL_STATUS << 32), DELTACYCLE, node);
-                    VWrite64((uint64_t)SETPARAMS, (uint64_t)rxbufq.front().tag        | ((uint64_t)PARAM_CMPL_RX_TAG << 32), DELTACYCLE, node);
                     VWrite64((uint64_t)SETPARAMS, (uint64_t)rxbufq.front().pkt_status | ((uint64_t)PARAM_PKT_STATUS  << 32), DELTACYCLE, node);
 
                     // If a successful completion returned, extract data
-                    if (!rxbufq.front().cpl_status)
+                    if (!rxbufq.front().cpl_status && !rxbufq.front().pkt_status)
                     {
+                        VWrite64((uint64_t)SETPARAMS, (uint64_t)rxbufq.front().tag    | ((uint64_t)PARAM_CMPL_RX_TAG << 32), DELTACYCLE, node);
+
                         // Get data
                         addrlo = rxbufq.front().loaddr & 0x3ULL;
                         for (rdata = 0, byteidx = 0; byteidx < (rdatawidth/8); byteidx++)
@@ -678,11 +679,14 @@ void pcieVcInterface::run(void)
                         VWrite(SETBOOLFROMMODEL, 1, DELTACYCLE, node);
                     }
 
-                    // Pop the received packet from the queue
-                    rxbufq.pop();
-
                     // Update transaction record return data
                     VWrite64(SETDATAFROMMODEL, rdata, DELTACYCLE, node);
+
+                    // Pop the received packet from the queue
+                    if (!rxbufq.empty())
+                    {
+                        rxbufq.pop();
+                    };
                 }
 
                 break;

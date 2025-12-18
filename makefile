@@ -48,7 +48,7 @@
 USRCDIR            = usercode
 OPDIR              = .
 USRFLAGS           =
-SIM                = ModelSim
+SIM                =
 
 # RivieraPRO only
 ALDECDIR           =  /c/Aldec/Riviera-PRO-2025.07-x64
@@ -117,6 +117,8 @@ else ifeq ("$(SIM)", "RivieraPRO")
   endif
 else ifeq ("$(SIM)", "ModelSim")
   TOOLFLAGS        = -m32 -DSIEMENS
+else
+  TOOLFLAGS        += -DSIEMENS
 endif
 
 RV32EXE            = test.exe
@@ -206,7 +208,7 @@ $(RV32EXE):
 dummy:
 
 $(VPROC_PLI): $(VLIB)
-	@$(C++) $(CPPSTD)                                   \
+	$(C++) $(CPPSTD)                                   \
             $(CFLAGS_SO)                                \
             -Wl,-whole-archive                          \
             $(CFLAGS)                                   \
@@ -218,7 +220,7 @@ $(VPROC_PLI): $(VLIB)
             -o $@
 
 $(VUSER_PLI): $(VULIB) $(RV32TEST)
-	@$(C++) $(CPPSTD)                                   \
+	$(C++) $(CPPSTD)                                   \
             $(CFLAGS_SO)                                \
             -Wl,-whole-archive                          \
             $(CFLAGS)                                   \

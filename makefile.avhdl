@@ -49,9 +49,6 @@ OPDIR              = .
 USRFLAGS           =
 AHDLDIR            = /c/Aldec/Active-HDL-16-x64
 
-# Get OS type
-OSTYPE:=$(shell uname)
-
 # Derived directory locations
 SRCDIR             = code
 TESTDIR            = $(OPDIR)
@@ -59,12 +56,7 @@ VOBJDIR            = $(TESTDIR)/obj
 PCIEDIR            = ../PCIe
 LTSSMDIR           = $(PCIEDIR)/ltssm
 
-# Derive correct PCIe co-sim library
-ifneq ($(OSTYPE), Linux)
-  PCIELIB=pcie_win64
-else
-  PCIELIB=pcie_lnx64
-endif
+PCIELIB=pcie_win64
 
 # VPROC C source code
 VPROC_C            = $(wildcard $(SRCDIR)/*.c*)
@@ -72,7 +64,7 @@ VPROC_C_BASE       = $(notdir $(filter %c, $(VPROC_C)))
 VPROC_CPP_BASE     = $(notdir $(filter %cpp, $(VPROC_C)))
 
 LTSSM_C            = $(wildcard $(LTSSMDIR)/*.c)
-LTSSM_CPP_BASE     = $(notdir $(filter %c, $(LTSSM_C)))
+LTSSM_C_BASE       = $(notdir $(filter %c, $(LTSSM_C)))
 
 # Test user code
 USER_C             = $(wildcard $(USRCDIR)/*.c*)
@@ -86,7 +78,7 @@ SRC_INCL           = $(wildcard $(SRCDIR)/*.h)
 USER_INCL          = $(wildcard $(USRCDIR)/*.h)
 LTSSM_INCL         = $(wildcard $(LTSSMDIR)/*.h)
 
-VOBJS              = $(addprefix $(VOBJDIR)/, $(VPROC_C_BASE:%.c=%.o) $(VPROC_CPP_BASE:%.cpp=%.o) $(LTSSM_CPP_BASE:%.c=%.o))
+VOBJS              = $(addprefix $(VOBJDIR)/, $(VPROC_C_BASE:%.c=%.o) $(VPROC_CPP_BASE:%.cpp=%.o) $(LTSSM_C_BASE:%.c=%.o))
 VUOBJS             = $(addprefix $(VOBJDIR)/, $(USER_C_BASE:%.c=%.o)  $(USER_CPP_BASE:%.cpp=%.o))
 
 AVHDLFLAGS         = -m64 -DALDEC -DACTIVEHDL -I$(AHDLDIR)/pli/Include -L$(AHDLDIR)/pli/Lib -l:aldecpli.lib
@@ -110,16 +102,10 @@ VULIB              = $(TESTDIR)/libvuser.a
 # Get OS type
 OSTYPE:=$(shell uname)
 
-# Set OS specific variables between Linux and Windows (MinGW)
-ifeq ($(OSTYPE), Linux)
-  CFLAGS_SO        = -shared -lpthread -lrt -rdynamic
-  CPPSTD           = -std=c++11
-  WLIB             =
-else
-  CFLAGS_SO        = -shared -Wl,-export-all-symbols
-  CPPSTD           =
-  WLIB             = -lWs2_32 -l:vproc.$(VPROCLIBSUFFIX)
-endif
+CFLAGS_SO          = -shared -Wl,-export-all-symbols
+CPPSTD             =
+WLIB               = -lWs2_32
+
 
 # Define the maximum number of supported VProcs in the compile pli library
 MAX_NUM_VPROC      = 64
@@ -155,7 +141,7 @@ $(VOBJDIR)/%.o: $(USRCDIR)/%.cpp $(USER_INCL)
 	@$(C++) $(CPPSTD) -Wno-write-strings -c $(CFLAGS) $(USRFLAGS) $< -o $@
 
 $(VOBJDIR)/%.o: $(LTSSMDIR)/%.c $(LTSSM_INCL)
-	@$(CC) -Wno-write-strings -c $(CFLAGS) $(USRFLAGS) $< -o $
+	@$(CC) -Wno-write-strings -c $(CFLAGS) $(USRFLAGS) $< -o $@
 
 $(VLIB) : $(VOBJS) $(VOBJDIR)
 	@ar cr $(VLIB) $(VOBJS)
@@ -200,6 +186,7 @@ $(VUSER_PLI): $(VULIB) $(RV32TEST)
             -L$(TESTDIR) -lvuser                        \
             -Wl,-no-whole-archive                       \
             $(WLIB)                                     \
+            -L$(CURDIR) -l:VProc.so                     \
             -ldl                                        \
             -o $@
 

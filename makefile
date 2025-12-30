@@ -12,7 +12,7 @@
 #
 #  Revision History:
 #    Date      Version    Description
-#    12/2025   ????.??    Fix for NVC linking of VProc.so
+#    12/2025   2026.01    Fix for NVC linking of VProc.so
 #    10/2022   2023.01    Initial version
 #
 #  This file is part of OSVVM.

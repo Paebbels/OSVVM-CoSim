@@ -15,7 +15,7 @@
 //
 //  Revision History:
 //    Date      Version    Description
-//    09/2025   ????.??    Added support for Set- & Get- burst mode and model options
+//    09/2025   2026.01    Added support for Set- & Get- burst mode and model options
 //    05/2023   2023.05    Adding support for Async, Try and Check transactions
 //                         and address bus repsonder
 //    01/2023   2023.01    Initial revision

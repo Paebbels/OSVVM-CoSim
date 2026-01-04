@@ -91,9 +91,9 @@ proc mk_vproc_common {testname libname} {
   set mkfilearg "makefile"
 
   # When an ALDEC simulator ...
-  if {($sim eq "ActiveHDL") || ($sim eq "RivieraPRO") } {
+  if {($sim eq "ActiveHDL") || ($sim eq "VSimSA") || ($sim eq "RivieraPRO") } {
     # If ActiveHDL, the choose its own makefile
-    if {($sim eq "ActiveHDL")} {
+    if {($sim eq "ActiveHDL") || ($sim eq "VSimSA")} {
       set mkfilearg "makefile.avhdl"
     }
 

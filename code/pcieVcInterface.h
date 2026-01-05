@@ -173,7 +173,7 @@ public:
     static constexpr int   SETMEMDATA            =   1006;
     static constexpr int   SETMEMENDIANNESS      =   1007;
 
-    // GetModelOptions for internal memory backdoor access
+    // GetModelOptions for internal memory back door access
     static constexpr int   GETMEMDATA            =   2000;
 
     // EXTEND_OP Options
@@ -183,6 +183,11 @@ public:
     // EXTEND_DIRECTIVE_OP Options
     static constexpr int   INITDLL               =      0;
     static constexpr int   INITPHY               =      1;
+
+
+    // Internal memory endian control definitions
+    static constexpr int   LITTLE_END            =      1;
+    static constexpr int   BIG_END               =      0;
 
 //  ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^
 // **** If the above values change, also update ../src/PcieVcInterfacePkg.vhd ****
@@ -213,10 +218,6 @@ public:
 
     // Tag generation control definitions
     static constexpr int   TLP_TAG_AUTO          =  0x100;
-
-    // Internal memory endian control definitions
-    static constexpr int   LITTLE_END            =      1;
-    static constexpr int   BIG_END               =      0;
 
     // Burst mask definitions
     static constexpr int   BYTE_OFFSET_MASK      =    0x3;

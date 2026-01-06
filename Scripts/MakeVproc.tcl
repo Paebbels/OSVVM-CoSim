@@ -121,7 +121,7 @@ proc mk_vproc_common {testname libname} {
 
     # If Siemens executable is 64-bit, set simulator for QuestaSim (which is
     # also good for 64-bit ModelSim SE as well), else assume 32-bit ModelSim
-    if {("$exectype" eq "PE32+") || ("$exectype" eq "64-bit")} {
+    if {("$exectype" eq "PE32+") || ("$exectype" eq "64-bit") || ("$sim" eq "Questa")} {
       set sim   "QuestaSim"
     } else {
       set sim   "ModelSim"

@@ -33,10 +33,6 @@
 #  limitations under the License.
 #
 
-# Analyze PCIe testbench and run tests on it
-include  ../PCIe/testbench
-include  ../PCIe/testbench/tests.pro
-
 # Analyze Axi4Lite testbench and run tests on it
 include  ./testbench/TbAxi4Lite
 include  ./testbench/TbAxi4Lite/tests.pro
@@ -74,4 +70,8 @@ include ./testbench/TestCases_Ethernet
 # Analyse AxiStream testbench and run tests on it
 include ./testbench/TbAxi4Stream
 include ./testbench/TestCases_Axi4Stream
+
+# Analyze PCIe testbench and run tests on it
+include  ../PCIe/testbench
+include  ../PCIe/testbench/tests.pro
 

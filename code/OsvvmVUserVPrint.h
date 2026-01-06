@@ -42,24 +42,7 @@
 // DEFINES AND MACROS
 // -------------------------------------------------------------------------
 
-// In windows using the FLI, a \n in the printf format string causes
-// two lines to be advanced, so replace new lines with carriage returns
-// which seems to work
-
-#if defined(SIEMENS) && defined(_WIN32)
-
-#define VPrint(format, ...) { int len;                                              \
-                              char formbuf[256];                                   \
-                              strncpy(formbuf, format, 255);                       \
-                              len = strlen(formbuf);                               \
-                              for(int i = 0; i < len; i++)                         \
-                                if (formbuf[i] == '\n')                            \
-                                  formbuf[i] = '\r';                               \
-                              printf (formbuf, ##__VA_ARGS__);                     \
-                              }
-# else
-#  define VPrint(...) {printf(__VA_ARGS__);}
-# endif
+#define VPrint(...) {printf(__VA_ARGS__);}
 
 #ifdef DEBUG
 #define DebugVPrint VPrint

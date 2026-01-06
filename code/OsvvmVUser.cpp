@@ -78,7 +78,7 @@ typedef HINSTANCE symhdl_t;
 typedef void*     symhdl_t;
 #endif
 
-#if defined (ACTIVEHDL) || defined(SIEMENS) || (defined(ALDEC) && !defined(_WIN32))
+#if defined(SIEMENS) || (defined(ALDEC) && !defined(_WIN32))
 static symhdl_t hdlvp;
 #endif
 
@@ -161,9 +161,8 @@ static void VUserInit (const int node)
 #endif
 
 #if defined(ACTIVEHDL)
-    // No separate user DLL under Active-HDL so simply use the VProc.so handle
-    hdlvu = hdlvp;
-#else
+    hdlvu = NULL;
+#else 
     sprintf(vusersoname, "./VUser.so");
     // Load user shared object to get handle to lookup VUsermain function symbols
     hdlvu = dlopen(vusersoname, RTLD_LAZY | RTLD_GLOBAL);
@@ -181,7 +180,7 @@ static void VUserInit (const int node)
         exit(1);
     }
 
-#if defined(ACTIVEHDL) || defined(SIEMENS) || (defined(ALDEC) && !defined(_WIN32))
+#if defined(SIEMENS) || (defined(ALDEC) && !defined(_WIN32))
     // Close the VProc.so handle to decrement the count, incremented with the open
     dlclose(hdlvp);
 #endif
@@ -219,7 +218,7 @@ int VUser (const int node)
 
     DebugVPrint("VUser(): initialised interrupt table node %d\n", node);
 
-#if defined(ACTIVEHDL) || defined (SIEMENS) || (defined(ALDEC) && !defined(_WIN32))
+#if defined (SIEMENS) || (defined(ALDEC) && !defined(_WIN32))
     // Load VProc shared object to make symbols global
     hdlvp = dlopen("./VProc.so", RTLD_LAZY | RTLD_GLOBAL);
 

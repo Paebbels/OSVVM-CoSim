@@ -40,14 +40,14 @@
 #   USRCDIR     : Directory where the test source directory is located
 #   OPDIR       : Directory for compilation output
 #   USRFLAGS    : Additional user defined compile and link flags
-#   AHDLDIR     : Location of Active-HDL installation
+#   ALDECDIR    : Location of Active-HDL installation
 #
 # --------------------------------------------------------------------------
 
 USRCDIR            = usercode
 OPDIR              = .
 USRFLAGS           =
-AHDLDIR            = /c/Aldec/Active-HDL-16-x64
+ALDECDIR           = 
 
 # Derived directory locations
 SRCDIR             = code
@@ -72,8 +72,6 @@ EXCLFILE           =
 USER_CPP_BASE      = $(patsubst $(EXCLFILE),,$(notdir $(filter %cpp, $(USER_C))))
 USER_C_BASE        = $(notdir $(filter %c, $(USER_C)))
 
-#$(info $(USRCDIR))
-
 SRC_INCL           = $(wildcard $(SRCDIR)/*.h)
 USER_INCL          = $(wildcard $(USRCDIR)/*.h)
 LTSSM_INCL         = $(wildcard $(LTSSMDIR)/*.h)
@@ -81,7 +79,7 @@ LTSSM_INCL         = $(wildcard $(LTSSMDIR)/*.h)
 VOBJS              = $(addprefix $(VOBJDIR)/, $(VPROC_C_BASE:%.c=%.o) $(VPROC_CPP_BASE:%.cpp=%.o) $(LTSSM_C_BASE:%.c=%.o))
 VUOBJS             = $(addprefix $(VOBJDIR)/, $(USER_C_BASE:%.c=%.o)  $(USER_CPP_BASE:%.cpp=%.o))
 
-AVHDLFLAGS         = -m64 -DALDEC -DACTIVEHDL -I$(AHDLDIR)/pli/Include -L$(AHDLDIR)/pli/Lib -l:aldecpli.lib
+AVHDLFLAGS         = -m64 -DACTIVEHDL -I$(ALDECDIR)/pli/Include -L$(ALDECDIR)/pli/Lib -l:aldecpli.lib
 
 RV32EXE            = test.exe
 RV32CMD            = cp $(USRCDIR)/test.exe $(OPDIR)
@@ -95,8 +93,6 @@ endif
 # Generated  PLI C library
 VPROC_PLI          = $(OPDIR)/VProc.so
 VLIB               = $(TESTDIR)/libvproc.a
-
-VUSER_PLI          = $(OPDIR)/VUser.so
 VULIB              = $(TESTDIR)/libvuser.a
 
 # Get OS type
@@ -126,7 +122,7 @@ CFLAGS             =  $(AVHDLFLAGS)                        \
 # BUILD RULES
 #------------------------------------------------------
 
-all: $(VPROC_PLI) $(VUSER_PLI)
+all: $(VPROC_PLI)
 
 $(VOBJDIR)/%.o: $(SRCDIR)/%.c $(SRC_INCL)
 	@$(CC) -c $(CCSTD) $(CFLAGS) $(USRFLAGS) $< -o $@
@@ -165,28 +161,16 @@ $(RV32EXE):
 .PHONY: dummy
 dummy:
 
-$(VPROC_PLI): $(VLIB) $(RV32TEST)
-	@$(C++) $(CPPSTD)                                   \
-            $(CFLAGS_SO)                                \
-            -Wl,-whole-archive                          \
-            $(CFLAGS)                                   \
-            -L$(TESTDIR) -lvproc                        \
-            -L$(PCIEDIR)/lib -l$(PCIELIB)               \
-            -Wl,-no-whole-archive                       \
-            $(WLIB)                                     \
-            -ldl                                        \
-            -o $@
-
-$(VUSER_PLI): $(VULIB) $(RV32TEST)
+$(VPROC_PLI): $(VLIB) $(VULIB) $(RV32TEST)
 	@$(C++) $(CPPSTD)                                   \
             $(CFLAGS_SO)                                \
             -Wl,-whole-archive                          \
             $(CFLAGS)                                   \
             $(USRFLAGS)                                 \
-            -L$(TESTDIR) -lvuser                        \
+            -L$(TESTDIR) -lvproc -lvuser                \
+            -L$(PCIEDIR)/lib -l$(PCIELIB)               \
             -Wl,-no-whole-archive                       \
             $(WLIB)                                     \
-            -L$(CURDIR) -l:VProc.so                     \
             -ldl                                        \
             -o $@
 
@@ -195,5 +179,5 @@ $(VUSER_PLI): $(VULIB) $(RV32TEST)
 #------------------------------------------------------
 
 clean:
-	@rm -rf $(VPROC_PLI) $(VUSER_PLI) $(VLIB) $(VULIB) $(VOBJS) $(VOBJDIR) $(RV32EXE)
+	@rm -rf $(VPROC_PLI) $(VLIB) $(VULIB) $(VOBJS) $(VOBJDIR) $(RV32EXE)
 

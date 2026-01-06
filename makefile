@@ -12,12 +12,13 @@
 #
 #  Revision History:
 #    Date      Version    Description
-#    12/2025   2026.01    Fix for NVC linking of VProc.so
+#    01/2026   2026.01    Fix for NVC linking of VProc.so
+#                         Consolidation for compiling for Active-HDL
 #    10/2022   2023.01    Initial version
 #
 #  This file is part of OSVVM.
 #
-#  Copyright (c) 2022 - 2025 by [OSVVM Authors](AUTHORS.md)
+#  Copyright (c) 2022 - 2026 by [OSVVM Authors](AUTHORS.md)
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -41,7 +42,8 @@
 #   USRFLAGS    : Additional user defined compile and link flags
 #   SIM         : The target simulator. One of GHDL, NVC, RivieraPRO,
 #                 QuestaSim, or ModelSim
-#   ALDECDIR    : Location of RivieraPRO installation, when selected by SIM
+#   ALDECDIR    : Location of RivieraPRO/Active-HDL installation, when
+#                 selected by SIM
 #
 # --------------------------------------------------------------------------
 
@@ -50,8 +52,8 @@ OPDIR              = .
 USRFLAGS           =
 SIM                =
 
-# RivieraPRO only
-ALDECDIR           =  /c/Aldec/Riviera-PRO-2025.07-x64
+# RivieraPRO or Active-HDL only
+ALDECDIR           =
 
 # Get OS type
 OSTYPE:=$(shell uname)
@@ -68,11 +70,7 @@ ifneq ($(OSTYPE), Linux)
   ifeq ("$(SIM)", "ModelSim")
     PCIELIB=pcie_win32
   else
-    ifeq ("$(SIM)", "QuestaSim")
-        PCIELIB=pcie_siemens_win64
-    else
-        PCIELIB=pcie_win64
-    endif
+    PCIELIB=pcie_win64
   endif
 else
   ifeq ("$(SIM)", "ModelSim")
@@ -80,7 +78,7 @@ else
   else
     PCIELIB=pcie_lnx64
   endif
-endif 
+endif
 
 # VPROC C source code
 VPROC_C            = $(wildcard $(SRCDIR)/*.c*)
@@ -106,8 +104,10 @@ VPROCLIBSUFFIX     = so
 
 TOOLFLAGS          = -m64
 
-ifeq ("$(SIM)", "QuestaSim")
-  TOOLFLAGS        += -DSIEMENS
+ifeq ("$(SIM)", "ModelSim")
+  TOOLFLAGS        = -m32 -DSIEMENS
+else ifeq ("$(SIM)", "QuestaSim")
+  TOOLFLAGS        += -DSIEMENS 
 else ifeq ("$(SIM)", "RivieraPRO")
   TOOLFLAGS        += -DALDEC -I$(ALDECDIR)/interfaces/include
   ifeq ($(OSTYPE), Linux)
@@ -115,10 +115,8 @@ else ifeq ("$(SIM)", "RivieraPRO")
   else
     TOOLFLAGS      += -L$(ALDECDIR)/interfaces/lib -l:aldecpli.lib
   endif
-else ifeq ("$(SIM)", "ModelSim")
-  TOOLFLAGS        = -m32 -DSIEMENS
 else
-  TOOLFLAGS        += -DSIEMENS
+  TOOLFLAGS        += -D$(SIM)
 endif
 
 RV32EXE            = test.exe
@@ -139,9 +137,9 @@ VULIB              = $(TESTDIR)/libvuser.a
 
 # Set OS specific variables between Linux and Windows (MinGW)
 ifeq ($(OSTYPE), Linux)
-  CFLAGS_SO        = -shared -lpthread -lrt -rdynamic 
+  CFLAGS_SO        = -shared -lpthread -lrt -rdynamic
   CPPSTD           = -std=c++11
-  WLIB             = 
+  WLIB             =
 else
   CFLAGS_SO        = -shared -Wl,-export-all-symbols
   CPPSTD           =
@@ -155,14 +153,14 @@ CC                 = gcc
 C++                = g++
 CCSTD              = -std=c99
 CFLAGS             = -fPIC                                 \
-                     $(TOOLFLAGS)                          \
-                     -g                                    \
-                     -I$(SRCDIR)                           \
-                     -I$(USRCDIR)                          \
-                     -I$(PCIEDIR)/include                  \
-                     -I$(LTSSMDIR)                         \
-                     -DVP_MAX_NODES=$(MAX_NUM_VPROC)       \
-                     -DOSVVM
+	                 $(TOOLFLAGS)                          \
+	                 -g                                    \
+	                 -I$(SRCDIR)                           \
+	                 -I$(USRCDIR)                          \
+	                 -I$(PCIEDIR)/include                  \
+	                 -I$(LTSSMDIR)                         \
+	                 -DVP_MAX_NODES=$(MAX_NUM_VPROC)       \
+	                 -DOSVVM
 
 #------------------------------------------------------
 # BUILD RULES
@@ -181,7 +179,7 @@ $(VOBJDIR)/%.o: $(USRCDIR)/%.c $(USER_INCL)
 
 $(VOBJDIR)/%.o: $(USRCDIR)/%.cpp $(USER_INCL)
 	@$(C++) $(CPPSTD) -Wno-write-strings -c $(CFLAGS) $(USRFLAGS) $< -o $@
-    
+
 $(VOBJDIR)/%.o: $(LTSSMDIR)/%.c $(LTSSM_INCL)
 	@$(CC) -Wno-write-strings -c $(CFLAGS) $(USRFLAGS) $< -o $@
 
@@ -208,29 +206,29 @@ $(RV32EXE):
 dummy:
 
 $(VPROC_PLI): $(VLIB)
-	$(C++) $(CPPSTD)                                   \
-            $(CFLAGS_SO)                                \
-            -Wl,-whole-archive                          \
-            $(CFLAGS)                                   \
-            -L$(TESTDIR) -lvproc                        \
-            -L$(PCIEDIR)/lib -l$(PCIELIB)               \
-            -Wl,-no-whole-archive                       \
-            $(WLIB)                                     \
-            -ldl                                        \
-            -o $@
+	@$(C++) $(CPPSTD)                                   \
+	        $(CFLAGS_SO)                                \
+	        -Wl,-whole-archive                          \
+	        $(CFLAGS)                                   \
+	        -L$(TESTDIR) -lvproc                        \
+	        -L$(PCIEDIR)/lib -l$(PCIELIB)               \
+	        -Wl,-no-whole-archive                       \
+	        $(WLIB)                                     \
+	        -ldl                                        \
+	        -o $@
 
 $(VUSER_PLI): $(VULIB) $(RV32TEST)
-	$(C++) $(CPPSTD)                                   \
-            $(CFLAGS_SO)                                \
-            -Wl,-whole-archive                          \
-            $(CFLAGS)                                   \
-            $(USRFLAGS)                                 \
-            -L$(TESTDIR) -lvuser                        \
-            -Wl,-no-whole-archive                       \
-            $(WLIB)                                     \
-            -L$(CURDIR) -l:VProc.$(VPROCLIBSUFFIX)      \
-            -ldl                                        \
-            -o $@
+	@$(C++) $(CPPSTD)                                   \
+	        $(CFLAGS_SO)                                \
+	        -Wl,-whole-archive                          \
+	        $(CFLAGS)                                   \
+	        $(USRFLAGS)                                 \
+	        -L$(TESTDIR) -lvuser                        \
+	        -Wl,-no-whole-archive                       \
+	        $(WLIB)                                     \
+	        -L$(CURDIR) -l:VProc.$(VPROCLIBSUFFIX)      \
+	        -ldl                                        \
+	        -o $@
 
 #------------------------------------------------------
 # CLEANING RULES

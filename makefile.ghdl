@@ -59,7 +59,7 @@ OSTYPE:=$(shell uname)
 # Set OS specific variables between Linux and Windows (MinGW)
 ifeq (${OSTYPE}, Linux)
   OSVVMDIR         = /git/OsvvmLibraries
-  GHDLROOT         = /usr/lib/ghdl
+  GHDLROOT         = /usr/local/lib/ghdl
   SIMEXE           = ${LCTB}
   OSGHDLFLAGS      =
   ADALIBPATH       = /usr/lib/gcc/x86_64-linux-gnu/9/adalib/

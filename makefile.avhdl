@@ -56,7 +56,7 @@ VOBJDIR            = $(TESTDIR)/obj
 PCIEDIR            = ../PCIe
 LTSSMDIR           = $(PCIEDIR)/ltssm
 
-PCIELIB=pcie_win64
+PCIELIB            = pcie_aldec_win64
 
 # VPROC C source code
 VPROC_C            = $(wildcard $(SRCDIR)/*.c*)

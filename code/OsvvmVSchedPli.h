@@ -50,7 +50,7 @@
 #define LINKAGE
 #endif
 
-#if defined(ALDEC)
+#if defined(ALDEC) || defined (ACTIVEHDL)
 #define USE_VHPI
 #endif
 

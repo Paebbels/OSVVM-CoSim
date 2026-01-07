@@ -42,7 +42,12 @@
 // DEFINES AND MACROS
 // -------------------------------------------------------------------------
 
-#define VPrint(...) {printf(__VA_ARGS__);}
+#if defined (ACTIVEHDL)
+#include <vhpi_user.h>
+# define VPrint(...) {vhpi_printf(__VA_ARGS__);}
+#else
+# define VPrint(...) {printf(__VA_ARGS__);}
+#endif
 
 #ifdef DEBUG
 #define DebugVPrint VPrint

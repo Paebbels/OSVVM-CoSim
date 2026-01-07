@@ -166,12 +166,12 @@ VPROC_RTN_TYPE VInit (VINIT_PARAMS)
     node = args[0];
 #endif
 
-    VPrint("VInit(%d)\n", node);
+    VPrint("VInit(%ld)\n", (long int)node);
 
     // Range check node number
     if (node < 0 || node >= VP_MAX_NODES)
     {
-        VPrint("***Error: VInit() got out of range node number (%d)\n", node);
+        VPrint("***Error: VInit() got out of range node number (%ld)\n", (long int)node);
         exit(VP_USER_ERR);
     }
 

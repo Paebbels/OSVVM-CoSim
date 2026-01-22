@@ -139,6 +139,7 @@ public:
     static constexpr int   EN_ECRC_ADDR          =    302;
     static constexpr int   INITPHY_ADDR          =    303;
     static constexpr int   ENABLE_AUTO_ADDR      =    304;
+    static constexpr int   SCRAMBLE_ADDR         =    305;
 
     // Transaction interface options address offsets
     static constexpr int   GETNEXTTRANS          =    400;
@@ -208,6 +209,8 @@ public:
     static constexpr int   EP_MODE_DISABLED      =      0;
     static constexpr int   DIGEST_MODE_ENABLED   =      1;
     static constexpr int   DIGEST_MODE_DISABLED  =      0;
+    static constexpr int   SCRAMBLING_ENABLED    =      0;
+    static constexpr int   SCRAMBLING_DISABLED   =      1;
 
     // Buffer sizes
     static constexpr int   STRBUFSIZE            =    256;
@@ -363,6 +366,8 @@ public:
                     ep_mode          = EP_MODE_DISABLED;
                     endian_mode      = LITTLE_END;
                     digest_mode      = DIGEST_MODE_DISABLED;
+                    no_scramble_mode = SCRAMBLING_ENABLED;
+                    
                     cfgspc_offset    = 0;
                     mem_addr         = 0;
                     tag              = 0;
@@ -394,6 +399,7 @@ private:
     unsigned           ep_mode;
     unsigned           digest_mode;
     unsigned           endian_mode;
+    unsigned           no_scramble_mode;
     unsigned           cfgspc_offset;
     uint64_t           mem_addr;
     char               sbuf[STRBUFSIZE];

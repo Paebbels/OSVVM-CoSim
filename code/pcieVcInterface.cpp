@@ -338,17 +338,23 @@ void pcieVcInterface::run(void)
         DebugVPrint("pcieVcInterface::run: on node %d\n", node);
 
         // Fetch the model generics
-        VRead(LANESADDR,    &link_width,  DELTACYCLE, node);
-        VRead(PIPE_ADDR,    &pipe_mode,   DELTACYCLE, node);
-        VRead(EP_ADDR,      &ep_mode,     DELTACYCLE, node);
-        VRead(EN_ECRC_ADDR, &digest_mode, DELTACYCLE, node);
-        VRead(REQID_ADDR,   &rid,         DELTACYCLE, node);
+        VRead(LANESADDR,     &link_width,       DELTACYCLE, node);
+        VRead(PIPE_ADDR,     &pipe_mode,        DELTACYCLE, node);
+        VRead(SCRAMBLE_ADDR, &no_scramble_mode, DELTACYCLE, node);
+        VRead(EP_ADDR,       &ep_mode,          DELTACYCLE, node);
+        VRead(EN_ECRC_ADDR,  &digest_mode,      DELTACYCLE, node);
+        VRead(REQID_ADDR,    &rid,              DELTACYCLE, node);
 
-        // When in PIPE mode, disable codec and scrambling
+        // When in PIPE mode, disable codec
         if (pipe_mode)
         {
-            pcie->configurePcie(CONFIG_DISABLE_SCRAMBLING);
             pcie->configurePcie(CONFIG_DISABLE_8B10B);
+        }
+        
+        // If configured, disable scrambling
+        if (no_scramble_mode)
+        {
+            pcie->configurePcie(CONFIG_DISABLE_SCRAMBLING);
         }
 
         // Make sure the link is out of electrical idle

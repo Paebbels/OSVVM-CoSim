@@ -17,6 +17,7 @@
 //
 //  Revision History:
 //    Date      Version    Description
+//    09/2025   2026.01    Added support for Set- & Get- burst mode and model options
 //    05/2023   2023.05    Adding support for Async, Check and Try functionality
 //    04/2023   2023.04    Adding basic stream support
 //    01/2023   2023.01    Initial revision
@@ -24,7 +25,7 @@
 //
 //  This file is part of OSVVM.
 //
-//  Copyright (c) 2023 by [OSVVM Authors](../AUTHORS.md)
+//  Copyright (c) 2023 - 2025 by [OSVVM Authors](../AUTHORS.md)
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -77,7 +78,7 @@ typedef HINSTANCE symhdl_t;
 typedef void*     symhdl_t;
 #endif
 
-#if defined (ACTIVEHDL) || defined(SIEMENS) || (defined(ALDEC) && !defined(_WIN32))
+#if defined(SIEMENS) || (defined(ALDEC) && !defined(_WIN32))
 static symhdl_t hdlvp;
 #endif
 
@@ -160,9 +161,8 @@ static void VUserInit (const int node)
 #endif
 
 #if defined(ACTIVEHDL)
-    // No separate user DLL under Active-HDL so simply use the VProc.so handle
-    hdlvu = hdlvp;
-#else
+    hdlvu = NULL;
+#else 
     sprintf(vusersoname, "./VUser.so");
     // Load user shared object to get handle to lookup VUsermain function symbols
     hdlvu = dlopen(vusersoname, RTLD_LAZY | RTLD_GLOBAL);
@@ -180,7 +180,7 @@ static void VUserInit (const int node)
         exit(1);
     }
 
-#if defined(ACTIVEHDL) || defined(SIEMENS) || (defined(ALDEC) && !defined(_WIN32))
+#if defined(SIEMENS) || (defined(ALDEC) && !defined(_WIN32))
     // Close the VProc.so handle to decrement the count, incremented with the open
     dlclose(hdlvp);
 #endif
@@ -191,7 +191,7 @@ static void VUserInit (const int node)
 
     // Call user program
     DebugVPrint("VUserInit(): calling VUserMain%d\n", node);
-    VUserMain_func();
+    VUserMain_func(node);
 
     while(true);
 }
@@ -218,7 +218,7 @@ int VUser (const int node)
 
     DebugVPrint("VUser(): initialised interrupt table node %d\n", node);
 
-#if defined(ACTIVEHDL) || defined (SIEMENS) || (defined(ALDEC) && !defined(_WIN32))
+#if defined (SIEMENS) || (defined(ALDEC) && !defined(_WIN32))
     // Load VProc shared object to make symbols global
     hdlvp = dlopen("./VProc.so", RTLD_LAZY | RTLD_GLOBAL);
 
@@ -1087,6 +1087,114 @@ void VSetTestName (const char* data, const int bytesize, const uint32_t node)
     VExch(&sbuf, &rbuf, node);
 
     return;
+}
+
+// -------------------------------------------------------------------------
+// VSetModelOptions()
+//
+// OSVVM VC SetModelOptions
+// -------------------------------------------------------------------------
+
+void VSetModelOptions (const int option, const int optval, const uint32_t node)
+{
+    rcv_buf_t  rbuf;
+    send_buf_t sbuf;
+
+    VInitSendBuf(sbuf);
+
+    sbuf.type           = trans_idle;
+    sbuf.op             = SET_MODEL_OPTIONS;
+    sbuf.param          = option;
+
+    *((int*)sbuf.data)  = optval;
+
+    VExch(&sbuf, &rbuf, node);
+}
+
+// -------------------------------------------------------------------------
+// VGetModelOptions()
+//
+// OSVVM VC GetModelOptions
+// -------------------------------------------------------------------------
+
+void VGetModelOptions (const int option, int &optval, const uint32_t node)
+{
+    rcv_buf_t  rbuf;
+    send_buf_t sbuf;
+
+    VInitSendBuf(sbuf);
+
+    sbuf.type           = trans_idle;
+    sbuf.op             = GET_MODEL_OPTIONS;
+    sbuf.param          = option;
+
+    VExch(&sbuf, &rbuf, node);
+
+    // Option value is returned in the count field
+    // containing the IntToModel value.
+    optval = rbuf.count;
+}
+
+void VGetModelOptions (const int option, bool &optval, const uint32_t node)
+{
+    rcv_buf_t  rbuf;
+    send_buf_t sbuf;
+
+    VInitSendBuf(sbuf);
+
+    sbuf.type           = trans_idle;
+    sbuf.op             = GET_MODEL_OPTIONS;
+    sbuf.param          = option;
+
+    VExch(&sbuf, &rbuf, node);
+
+    // Option value is returned in the status field
+    // containing the BoolToModel value.
+    optval = rbuf.status;
+}
+
+// -------------------------------------------------------------------------
+// VSetBurstMode()
+//
+// OSVVM VC SetBurstMode
+// -------------------------------------------------------------------------
+
+void VSetBurstMode (const int mode, const uint32_t node)
+{
+    rcv_buf_t  rbuf;
+    send_buf_t sbuf;
+
+    VInitSendBuf(sbuf);
+
+    sbuf.type           = trans_idle;
+    sbuf.op             = SET_BURST_MODE;
+
+    *((int*)sbuf.data)  = mode;
+
+    VExch(&sbuf, &rbuf, node);
+}
+
+// -------------------------------------------------------------------------
+// VGetBurstMode()
+//
+// OSVVM VC GetBurstMode
+// -------------------------------------------------------------------------
+
+int  VGetBurstMode (const uint32_t node)
+{
+    rcv_buf_t  rbuf;
+    send_buf_t sbuf;
+
+    VInitSendBuf(sbuf);
+
+    sbuf.type           = trans_idle;
+    sbuf.op             = GET_BURST_MODE;
+
+    VExch(&sbuf, &rbuf, node);
+
+    // mode value is returned in the count field
+    // containing the IntToModel value.
+    return rbuf.count;
 }
 
 

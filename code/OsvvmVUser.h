@@ -15,6 +15,7 @@
 //
 //  Revision History:
 //    Date      Version    Description
+//    09/2025   2026.01    Added support for Set- & Get- burst mode and model options
 //    05/2023   2023.05    Adding support for Async, Try and Check transactions
 //                         and address bus repsonder
 //    01/2023   2023.01    Initial revision
@@ -22,7 +23,7 @@
 //
 //  This file is part of OSVVM.
 //
-//  Copyright (c) 2023 by [OSVVM Authors](../AUTHORS.md)
+//  Copyright (c) 2023 - 2025 by [OSVVM Authors](../AUTHORS.md)
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -49,6 +50,7 @@
 
 #include "OsvvmVProc.h"
 #include "OsvvmVSchedPli.h"
+#include "OsvvmVUserVprint.h"
 
 // -------------------------------------------------------------------------
 // DEFINES AND MACROS
@@ -70,34 +72,6 @@
 #define HUNDRED_MILLISECS       1000000
 #define FIVESEC_TIMEOUT         (50*HUNDRED_MILLISECS)
 
-// In windows using the FLI, a \n in the printf format string causes
-// two lines to be advanced, so replace new lines with carriage returns
-// which seems to work
-# ifndef ALDEC
-#  ifdef _WIN32
-
-# define VPrint(format, ...) {int len;                                             \
-                              char formbuf[256];                                   \
-                              strncpy(formbuf, format, 255);                       \
-                              len = strlen(formbuf);                               \
-                              for(int i = 0; i < len; i++)                         \
-                                if (formbuf[i] == '\n')                            \
-                                  formbuf[i] = '\r';                               \
-                              printf (formbuf, ##__VA_ARGS__);                     \
-                              }
-#  else
-#  define VPrint(...) {printf(__VA_ARGS__);}
-#  endif
-# else
-#  define VPrint(...) {vhpi_printf(__VA_ARGS__);}
-# endif
-
-#ifdef DEBUG
-#define DebugVPrint VPrint
-#else
-#define DebugVPrint(...) {}
-
-#endif
 // -------------------------------------------------------------------------
 // TYPE DEFINITIONS
 // -------------------------------------------------------------------------
@@ -106,7 +80,7 @@
 typedef void *(*pThreadFunc_t)(void *);
 
 // Pointer to VUserMain function type definition
-typedef void (*pVUserMain_t)(void);
+typedef void (*pVUserMain_t)(int node);
 
 // -------------------------------------------------------------------------
 // FUNCTION PROTOTYPES
@@ -122,6 +96,13 @@ extern void      VWaitForSim                    (const uint32_t node = 0);
 
 // OSVVM support function to set the test name
 extern void      VSetTestName                   (const char*    data, const int bytesize, const uint32_t node);
+
+// OSVVM VC Set- and Get- for model options and burst mode
+extern void      VSetModelOptions               (const int option, const int optval, const uint32_t node = 0);
+extern void      VGetModelOptions               (const int option, int  &optval, const uint32_t node = 0);
+extern void      VGetModelOptions               (const int option, bool &optval, const uint32_t node = 0);
+extern void      VSetBurstMode                  (const int mode, const uint32_t node = 0);
+extern int       VGetBurstMode                  (const uint32_t node = 0);
 
 // Overloaded transaction functions for 32 and 64 bit architecture for byte, half-word, word and double-word
 extern uint8_t   VTransUserCommon               (const int op, uint32_t *addr, const uint8_t  data, int* status, const int prot = 0, const uint32_t node = 0);

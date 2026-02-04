@@ -15,7 +15,7 @@
 //
 //  Revision History:
 //    Date      Version    Description
-//    12/2025   ????.??    Using 64-bit arguments when flagged to do so
+//    07/2025   2026.01    Adding VIrqVec CoSim procedure
 //    05/2023   2023.05    Refactored VTrans arguments
 //    10/2022   2023.01    Initial revision
 //
@@ -50,7 +50,7 @@
 #define LINKAGE
 #endif
 
-#if defined(ALDEC)
+#if defined(ALDEC) || defined (ACTIVEHDL)
 #define USE_VHPI
 #endif
 
@@ -63,9 +63,10 @@
 # endif
 
 #define VINIT_PARAMS               vint_t  node
+#define VIRQVEC_PARAMS             vint_t  node,     vint_t  irq
 #define VTRANS_PARAMS              vint_t  node,     vint_t  Interrupt,   vint_t  VPStatus,    vint_t  VPCount,     vint_t  VPCountSec,  \
-                                   vint_t* VPData,   vint_t* VPDataHi,    vint_t* VPDataWidth,                                           \
-                                   vint_t* VPAddr,   vint_t* VPAddrHi,    vint_t* VPAddrWidth,                                           \
+                                   vint_t* VPData,   vint_t* VPDataHi,    vint_t* VPDataWidth,                                     \
+                                   vint_t* VPAddr,   vint_t* VPAddrHi,    vint_t* VPAddrWidth,                                     \
                                    vint_t* VPOp,     vint_t* VPBurstSize, vint_t* VPTicks,     vint_t* VPDone,      vint_t* VPError,     \
                                    vint_t* VPParam
 #define VGETBURSTWRBYTE_PARAMS     vint_t  node,     vint_t  idx,         vint_t* data
@@ -82,19 +83,19 @@
 #endif
 
 #define VINIT_PARAMS                        const struct vhpiCbDataS* cb
+#define VIRQVEC_PARAMS                      const struct vhpiCbDataS* cb
 #define VTRANS_PARAMS                       const struct vhpiCbDataS* cb
 #define VGETBURSTWRBYTE_PARAMS              const struct vhpiCbDataS* cb
 #define VSETBURSTRDBYTE_PARAMS              const struct vhpiCbDataS* cb
 
 #define VINIT_NUM_ARGS                      1
+#define VIRQVEC_NUM_ARGS                    2
 #define VTRANS_NUM_ARGS                     17
 #define VGETBURSTWRBYTE_NUM_ARGS            3
 #define VSETBURSTRDBYTE_NUM_ARGS            3
-                                            
+
 #define VTRANS_START_OF_OUTPUTS             5
 #define VGETBURSTWRBYTE_START_OF_OUTPUTS    2
-
-#define VPROC_RTN_TYPE                      PLI_VOID
 
 # if defined(ALDEC)
 # define VPROC_RTN_TYPE                      PLI_VOID
@@ -109,6 +110,7 @@
 #endif
 
 extern LINKAGE VPROC_RTN_TYPE VInit           (VINIT_PARAMS);
+extern LINKAGE VPROC_RTN_TYPE VIrqVec         (VIRQVEC_PARAMS);
 extern LINKAGE VPROC_RTN_TYPE VTrans          (VTRANS_PARAMS);
 extern LINKAGE VPROC_RTN_TYPE VSetBurstRdByte (VSETBURSTRDBYTE_PARAMS);
 extern LINKAGE VPROC_RTN_TYPE VGetBurstWrByte (VGETBURSTWRBYTE_PARAMS);

@@ -12,13 +12,12 @@
 #
 #  Revision History:
 #    Date      Version    Description
-#    12/2025   ????.??    Flag for when using 64-bit integers
 #    10/2022   2023.01    Initial version
 #
 #
 #  This file is part of OSVVM.
 #
-#  Copyright (c) 2022 - 2025 by [OSVVM Authors](../AUTHORS.md)
+#  Copyright (c) 2022 by [OSVVM Authors](../AUTHORS.md)
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -92,9 +91,9 @@ proc mk_vproc_common {testname libname} {
   set mkfilearg "makefile"
 
   # When an ALDEC simulator ...
-  if {($sim eq "ActiveHDL") || ($sim eq "RivieraPRO") } {
+  if {($sim eq "ActiveHDL") || ($sim eq "VSimSA") || ($sim eq "RivieraPRO") } {
     # If ActiveHDL, the choose its own makefile
-    if {($sim eq "ActiveHDL")} {
+    if {($sim eq "ActiveHDL") || ($sim eq "VSimSA")} {
       set mkfilearg "makefile.avhdl"
     }
 
@@ -122,7 +121,7 @@ proc mk_vproc_common {testname libname} {
 
     # If Siemens executable is 64-bit, set simulator for QuestaSim (which is
     # also good for 64-bit ModelSim SE as well), else assume 32-bit ModelSim
-    if {("$exectype" eq "PE32+") || ("$exectype" eq "64-bit")} {
+    if {("$exectype" eq "PE32+") || ("$exectype" eq "64-bit") || ("$sim" eq "Questa")} {
       set sim   "QuestaSim"
     } else {
       set sim   "ModelSim"

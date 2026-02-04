@@ -15,7 +15,8 @@
 //
 //  Revision History:
 //    Date      Version    Description
-//    12/2025   ????.??    More generic flag to use VHPI
+//    07/2025   2026.01    Adding VIrqVec CoSim procedure
+//                         More generic flag to use VHPI
 //    05/2023   2023.05    Adding support for asynchronous transactions
 //                         and address bus responder transactions
 //    03/2023   2023.04    Adding basic stream support
@@ -65,6 +66,7 @@ VPROC_RTN_TYPE reg_foreign_procs() {
     int idx;
     vhpiForeignDataT foreignDataArray[] = {
         {vhpiProcF, (char*)"VProc", (char*)"VInit",           NULL, VInit},
+        {vhpiProcF, (char*)"VProc", (char*)"VIrqVec",         NULL, VIrqVec},
         {vhpiProcF, (char*)"VProc", (char*)"VTrans",          NULL, VTrans},
         {vhpiProcF, (char*)"VProc", (char*)"VSetBurstRdByte", NULL, VSetBurstRdByte},
         {vhpiProcF, (char*)"VProc", (char*)"VGetBurstWrByte", NULL, VGetBurstWrByte},
@@ -164,12 +166,12 @@ VPROC_RTN_TYPE VInit (VINIT_PARAMS)
     node = args[0];
 #endif
 
-    VPrint("VInit(%d)\n", node);
+    VPrint("VInit(%ld)\n", (long int)node);
 
     // Range check node number
     if (node < 0 || node >= VP_MAX_NODES)
     {
-        VPrint("***Error: VInit() got out of range node number (%d)\n", node);
+        VPrint("***Error: VInit() got out of range node number (%ld)\n", (long int)node);
         exit(VP_USER_ERR);
     }
 
@@ -200,6 +202,7 @@ VPROC_RTN_TYPE VInit (VINIT_PARAMS)
 
 // -------------------------------------------------------------------------
 // VTrans
+//
 // Main routine called whenever VTrans procedure invoked on
 // clock edge of scheduled cycle.
 //
@@ -230,9 +233,9 @@ VPROC_RTN_TYPE VTrans (VTRANS_PARAMS)
     VPCount              = args[argIdx++];
     VPCountSec           = args[argIdx++];
 
-    VPDataOut_int        = 0; VPDataOut_int  = 0;
+    VPDataOut_int        = 0; VPDataOutHi_int = 0;
     VPDataWidth_int      = 0;
-    VPAddr_int           = 0; VPAddrHi_int   = 0;
+    VPAddr_int           = 0; VPAddrHi_int    = 0;
     VPAddrWidth_int      = 0;
     VPOp_int             = 0;
     VPBurstSize_int      = 0;
@@ -288,7 +291,7 @@ VPROC_RTN_TYPE VTrans (VTRANS_PARAMS)
     if (ns[node]->send_buf.ticks >= DELTA_CYCLE)
     {
         VPDataOut_int   = ((uint32_t*)ns[node]->send_buf.data)[0];
-        VPDataOutHi_int = ((uint32_t*)ns[node]->send_buf.data)[4];
+        VPDataOutHi_int = ((uint32_t*)ns[node]->send_buf.data)[1];
         VPAddr_int      = (uint32_t)((ns[node]->send_buf.addr)       & 0xffffffffULL);
         VPAddrHi_int    = (uint32_t)((ns[node]->send_buf.addr >> 32) & 0xffffffffULL);
         VPOp_int        = ns[node]->send_buf.op;
@@ -432,5 +435,32 @@ VPROC_RTN_TYPE VGetBurstWrByte(VGETBURSTWRBYTE_PARAMS)
 #else
     *data = ns[node]->send_buf.databuf[idx % DATABUF_SIZE];
 #endif
+}
+
+// -------------------------------------------------------------------------
+// VIrqVec()
+///
+// Main routine called whenever VIrqVec procedure invoked on
+// clock edge of scheduled cycle.
+//
+// -------------------------------------------------------------------------
+
+VPROC_RTN_TYPE VIrqVec (VIRQVEC_PARAMS)
+{
+#if defined(USE_VHPI)
+    int node, irq;
+    int args[VIRQVEC_NUM_ARGS];
+
+    getVhpiParams(cb, args, VIRQVEC_NUM_ARGS);
+    
+    int argIdx = 0;
+    node = args[argIdx++];
+    irq  = args[argIdx++];
+#endif
+
+    if (ns[node]->VIntVecCB != NULL)
+    {
+        (*(ns[node]->VIntVecCB))(irq);
+    }
 }
 

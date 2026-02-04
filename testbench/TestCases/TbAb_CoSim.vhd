@@ -19,12 +19,13 @@
 --
 --  Revision History:
 --    Date      Version    Description
+--    07/2025   ????.??    Updated to use CoSimIrq
 --    09/2022   2023.01    Initial revision
 --
 --
 --  This file is part of OSVVM.
 --
---  Copyright (c) 2022 by [OSVVM Authors](../../AUTHORS.md)
+--  Copyright (c) 2022 - 2025 by [OSVVM Authors](../../AUTHORS.md)
 --
 --  Licensed under the Apache License, Version 2.0 (the "License");
 --  you may not use this file except in compliance with the License.
@@ -48,6 +49,7 @@ architecture CoSim of TestCtrl is
   signal   TestDone       : integer_barrier := 1 ;
   signal   TestActive     : boolean         := TRUE ;
   signal   OperationCount : integer         := 0 ;
+  signal   Initialised    : boolean         := FALSE;       
 
 begin
 
@@ -91,7 +93,7 @@ begin
   ManagerProc : process
     variable OpRV           : RandomPType ;
     variable WaitForClockRV : RandomPType ;
-    variable counts         : integer;
+    variable counts         : integer := 0;
 
     -- CoSim variables
     variable RnW            : integer ;
@@ -108,8 +110,9 @@ begin
 
     -- Initialise VProc code
     CoSimInit(NodeNum);
+    Initialised <= TRUE;
     -- Fetch the SetTestName
-    CoSimTrans (ManagerRec, Done, Error, IntReq, NodeNum);
+    --CoSimTrans (ManagerRec, Done, Error, IntReq, NodeNum);
 
     SetBurstMode(ManagerRec, BURST_MODE) ;
 
@@ -129,8 +132,10 @@ begin
 
       AlertIf(Error /= 0, "CoSimTrans flagged an error") ;
 
-      -- Finish when counts == 0
+      -- Finish when Done flagged
       exit when Done /= 0;
+      
+      counts := counts + 1;
 
     end loop OperationLoop ;
 
@@ -146,6 +151,45 @@ begin
     WaitForBarrier(TestDone) ;
     wait ;
   end process ManagerProc ;
+  
+  ------------------------------------------------------------
+  -- InterruptProc
+  --   Generate interupts in lieu of a DUT
+  ------------------------------------------------------------
+  InterruptProc : process
+  begin
+  
+    wait until nReset = '1' ;
+
+    wait for 85 ns ; 
+    gIntReq(0) <= force '1' ;
+    wait for 50 ns ; 
+    gIntReq(0) <= force '0' ;
+     wait for 180 ns ; 
+    gIntReq(0) <= force '1' ;
+    wait for 190 ns ; 
+    gIntReq(0) <= force '0' ;
+  
+    wait ;
+  
+  end process InterruptProc ;
+  
+  ------------------------------------------------------------
+  -- ProcessIrq
+  --   Process interrupts and send to cosimulation code
+  ------------------------------------------------------------
+  ProcessIrq : process (gIntReq)
+    variable Int            : integer := 0 ;
+    variable NodeNum        : integer := Node ;
+  begin
+    if Initialised then
+      Int := to_integer(gIntReq(0));
+      
+      --Log("**** ProcessIrq " & integer'image(Int));
+      CoSimIrq(Int, NodeNum);
+   end if ;
+
+  end process ProcessIrq ;
 
 end CoSim ;
 

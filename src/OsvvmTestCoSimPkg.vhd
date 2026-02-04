@@ -14,6 +14,8 @@
 --
 --  Revision History:
 --    Date      Version    Description
+--    09/2025   2026.01    Updated CoSimIrq to use VIrqVec
+--                         Added support for Set- & Get- burst mode and model options
 --    05/2023   2023.05    Adding asynchronous, check and try transaction support,
 --                         and added address bus responder functionality.
 --    04/2023   2023.04    Adding basic stream support
@@ -22,7 +24,7 @@
 --
 --  This file is part of OSVVM.
 --
---  Copyright (c) 2023 by [OSVVM Authors](../AUTHORS.md)
+--  Copyright (c) 2023 - 2025 by [OSVVM Authors](../AUTHORS.md)
 --
 --  Licensed under the Apache License, Version 2.0 (the "License");
 --  you may not use this file except in compliance with the License.
@@ -315,30 +317,10 @@ package body OsvvmTestCoSimPkg is
     variable IntReq          : in integer := 0 ;
     variable NodeNum         : in integer := 0
   ) is
-    variable UnusedVPData          : integer := 0 ;
-    variable UnusedVPDataHi        : integer := 0 ;
-    variable UnusedVPDataWidth     : integer := 0 ;
-    variable UnusedVPAddr          : integer := 0 ;
-    variable UnusedVPAddrHi        : integer := 0 ;
-    variable UnusedVPAddrWidth     : integer := 0 ;
-    variable UnusedVPOp            : integer := 0 ;
-    variable UnusedVPBurstSize     : integer := 0 ;
-    variable UnusedVPTicks         : integer := 0 ;
-    variable UnusedVPDone          : integer := 0 ;
-    variable UnusedVPError         : integer := 0 ;
-    variable UnusedVPParam         : integer := 0 ;
-    variable UnusedVPStatus        : integer := 0 ;
-    variable UnusedVPCount         : integer := 0 ;
-    variable UnusedVPCountSec      : integer := 0 ;
   begin
 
     -- Call VTrans to generate a new access
-    VTrans(NodeNum,         IntReq,
-           UnusedVPStatus,  UnusedVPCount,     UnusedVPCountSec,
-           UnusedVPData,    UnusedVPDataHi,    UnusedVPDataWidth,
-           UnusedVPAddr,    UnusedVPAddrHi,    UnusedVPAddrWidth,
-           UnusedVPOp,      UnusedVPBurstSize, UnusedVPTicks,
-           UnusedVPDone,    UnusedVPError,     UnusedVPParam) ;
+    VIrqVec(NodeNum, IntReq) ;
 
   end procedure CoSimIrq ;
 
@@ -383,6 +365,23 @@ package body OsvvmTestCoSimPkg is
       case AddressBusOperationType'val(VPOperation) is
         when WAIT_FOR_CLOCK =>
           WaitForClock(ManagerRec, VPTicks) ;
+
+        when SET_MODEL_OPTIONS =>
+          if VPDataOut /= 0 then
+            ManagerRec.BoolToModel <= true;
+          else
+            ManagerRec.BoolToModel <= false;
+          end if;
+          SetModelOptions(ManagerRec, VPParam, VPDataOut) ;
+
+        when GET_MODEL_OPTIONS =>
+          GetModelOptions(ManagerRec, VPParam, RdData(VPDataWidth-1 downto 0)) ;
+
+        when SET_BURST_MODE =>
+          SetBurstMode(ManagerRec, VPDataOut) ;
+
+        when GET_BURST_MODE =>
+          GetBurstMode(ManagerRec, RdDataInt) ;
 
         when READ_OP =>
           Read  (ManagerRec, Address(VPAddrWidth-1 downto 0), RdData(VPDataWidth-1 downto 0)) ;
@@ -715,6 +714,23 @@ package body OsvvmTestCoSimPkg is
         when WAIT_FOR_CLOCK =>
           WaitForClock(SubordinateRec, VPTicks) ;
 
+        when SET_MODEL_OPTIONS =>
+          if VPDataOut /= 0 then
+            SubordinateRec.BoolToModel <= true;
+          else
+            SubordinateRec.BoolToModel <= false;
+          end if;
+          SetModelOptions(SubordinateRec, VPParam, VPDataOut) ;
+
+        when GET_MODEL_OPTIONS =>
+          GetModelOptions(SubordinateRec, VPParam, RdData(VPDataWidth-1 downto 0)) ;
+
+        when SET_BURST_MODE =>
+          SetBurstMode(SubordinateRec, VPDataOut) ;
+
+        when GET_BURST_MODE =>
+          GetBurstMode(SubordinateRec, RdDataInt) ;
+
         when WRITE_OP =>
           GetWrite(SubordinateRec, Address(VPAddrWidth-1 downto 0), RdData(VPDataWidth-1 downto 0)) ;
 
@@ -888,6 +904,23 @@ package body OsvvmTestCoSimPkg is
 
         when WAIT_FOR_CLOCK =>
           WaitForClock(TxRec, VPTicks) ;
+
+        when SET_MODEL_OPTIONS =>
+          if VPDataOut /= 0 then
+            TxRec.BoolToModel <= true;
+          else
+            TxRec.BoolToModel <= false;
+          end if;
+          SetModelOptions(TxRec, VPParam, VPDataOut) ;
+
+        when GET_MODEL_OPTIONS =>
+          GetModelOptions(TxRec, VPParam, RdData(VPDataWidth-1 downto 0)) ;
+
+        when SET_BURST_MODE =>
+          SetBurstMode(TxRec, VPDataOut) ;
+
+        when GET_BURST_MODE =>
+          GetBurstMode(TxRec, RdDataInt) ;
 
         when GET =>
           Param := (others => '0') ;

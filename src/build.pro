@@ -12,7 +12,8 @@
 #
 #  Revision History:
 #    Date      Version    Description
-#     9/2022   2023.01    Initial version
+#    01/2026   2026.01    Fix for VSimSA compilation
+#    09/2022   2023.01    Initial version
 #
 #
 #  This file is part of OSVVM.
@@ -34,7 +35,7 @@
 
 library    osvvm_cosim
 
-if {($::osvvm::ToolName eq "ActiveHDL") || ($::osvvm::ToolName eq "RivieraPRO")} {
+if {($::osvvm::ToolName eq "ActiveHDL") || ($::osvvm::ToolName eq "VSimSA") || ($::osvvm::ToolName eq "RivieraPRO")} {
   analyze OsvvmVprocAldecPkg.vhd
 } elseif {$::osvvm::ToolName eq "NVC"} {
   analyze OsvvmVprocNvcPkg.vhd

@@ -16,14 +16,14 @@
 //
 //  Revision History:
 //    Date      Version    Description
-//    09/2025   ????.??    Update model to v1.3.1
+//    07/2026   2026.08    Update model to v1.3.6
 //    07/2023   2023.??    Updates for supporting FreeRTOS
 //    01/2023   2023.01    Released with OSVVM CoSim
 //    28th Jun  2021       Earlier version
 //
 //  This file is part of OSVVM.
 //
-//  Copyright (c) 2021 - 2025 Simon Southwell. 
+//  Copyright (c) 2021 - 2026 Simon Southwell. 
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -267,7 +267,7 @@ public:
     static const uint32_t RV32I_NUM_TERTIARY_OPCODES                   = 128;
     static const uint32_t RV32I_NUM_QUARTERNARY_OPCODES                = 32;
     static const uint32_t RV32I_NUM_SYSTEM_OPCODES                     = 32;
-    static const uint32_t RV32I_INT_MEM_BYTES                          = (1024*1024);
+    static const uint32_t RV32I_INT_MEM_BYTES                          = (2*1024*1024);
 
     // The RV32I base class has a hardwired MTVEC location since
     // since CSR accesses are not supported. Set to riscv-test-env
@@ -276,6 +276,9 @@ public:
 
     // Reset vector (implementation dependent)
     static const uint32_t RV32I_RESET_VECTOR                           = 0x00000000;
+
+    // Stack pointer (implementation dependent)
+    static const uint32_t RV32I_STACK_POINTER                          = 0x00000000;
 
     // Memory mapped mtime and mtimecmp register offsets
     static const uint32_t RV32I_RTCLOCK_ADDRESS                        = 0xafffffe0;
@@ -297,9 +300,9 @@ public:
     static const uint32_t RV32I_NV                                     = 0x10;
 
     static const uint64_t RV32I_QNANF                                  = 0xffffffff7fc00000UL;
-    static const uint64_t RV32I_SNANF                                  = 0xffffffff7fbfffffUL;
+    static const uint64_t RV32I_SNANF                                  = 0xffffffff7f800001UL;
     static const uint64_t RV32I_QNAND                                  = 0x7ff8000000000000UL;
-    static const uint64_t RV32I_SNAND                                  = 0x7ff7ffffffffffffUL;
+    static const uint64_t RV32I_SNAND                                  = 0x7ff0000000000001UL;
 
     static const uint32_t RV32I_OPCODE_LOAD                            = (0x00 << 2) | 0x03;
     static const uint32_t RV32I_OPCODE_LOAD_FP                         = (0x01 << 2) | 0x03;
@@ -647,6 +650,8 @@ struct  rv32i_cfg_s {
     uint32_t       brk_addr;
     bool           update_rst_vec;
     uint32_t       new_rst_vec;
+    bool           update_sp;
+    uint32_t       new_sp;
     FILE*          dbg_fp;
 
     rv32i_cfg_s()
@@ -674,6 +679,8 @@ struct  rv32i_cfg_s {
         brk_addr               = rv32i_consts::RISCV_TEST_ENV_TERMINATE_ADDR;
         update_rst_vec         = false;
         new_rst_vec            = rv32i_consts::RV32I_RESET_VECTOR;
+        update_sp              = false;
+        new_sp                 = rv32i_consts::RV32I_STACK_POINTER;
         dbg_fp                 = stdout;
     }
 };

@@ -14,6 +14,7 @@
 //
 //  Revision History:
 //    Date      Version    Description
+//    06/2026   2026.08    Added support for DLLP and PHY traffic processing
 //    09/2025   2026.01    Initial Version
 //
 //  This file is part of OSVVM.
@@ -125,6 +126,7 @@ void pcieVcInterface::VUserInput(pPkt_t pkt, int status, void* obj_instance)
 void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
 {
     int idx;
+    PktData_t crc[2];
 
     PktData_t tlp_type = GET_TLP_TYPE(pkt->data);
 
@@ -132,6 +134,18 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
     if (pkt->seq == DLLP_SEQ_ID)
     {
         DebugVPrint("---> VUserInput_0 received DLLP\n");
+
+        // Create a new entry in the queue for the DLLP
+        dllbufq.push(DllBuf_t());
+
+        // Decode and save off the data fields for the DLLP
+        dllbufq.back().status   = status;
+        dllbufq.back().type     = pkt->data[1] & ((pkt->data[1] & 0xc0) ? 0xf8 : 0xff);
+        dllbufq.back().vc       = pkt->data[1] & ((pkt->data[1] & 0xc0) ? 0x07 : 0x00);
+        dllbufq.back().hdrfc    = ((pkt->data[2] & 0x3f) << 2) | ((pkt->data[3] & 0xc0) >> 6);
+        dllbufq.back().datafc   = ((pkt->data[3] & 0x0f) << 8) | pkt->data[4];
+        dllbufq.back().seqnum   = dllbufq.back().datafc;
+        dllbufq.back().venddata = ((unsigned)pkt->data[2] << 16) | ((unsigned)pkt->data[3] << 8) | (unsigned)pkt->data[4];
     }
     // Process completions
     else if (tlp_type == TL_CPL || tlp_type == TL_CPLD || tlp_type == TL_CPLLK || tlp_type == TL_CPLDLK)
@@ -161,7 +175,7 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
         // If a successful completion with data, extract the TPL payload data
         else if (pkt->ByteCount)
         {
-            // Size the buffer for the incoming data, plus offset 
+            // Size the buffer for the incoming data, plus offset
             rxbufq.back().rxbuf.resize(pkt->ByteCount + 4);
 
             // Get a pointer to the start of the payload data
@@ -286,37 +300,45 @@ void pcieVcInterface::InputCallback(pPkt_t pkt, int status)
 
 void pcieVcInterface::run(void)
 {
-    int                error = 0;
-    bool               end   = false;
-    int                halt  = 0;
+    int                   error = 0;
+    bool                  end   = false;
+    int                   halt  = 0;
 
-    int                byteidx;
-    unsigned           operation;
-    unsigned           int_to_model;
-    unsigned           option;
-    int                pad_offset;
+    int                   byteidx;
+    unsigned              operation;
+    unsigned              int_to_model;
+    unsigned              int_from_model;
+    unsigned              option;
+    int                   pad_offset;
 
-    uint32_t           status;
-    uint32_t           be;
-    uint32_t           popdata;
-    uint32_t           memword;
+    uint32_t              status;
+    uint32_t              be;
+    uint32_t              popdata;
+    uint32_t              memword;
 
-    uint64_t           rdata;
-    uint64_t           wdata;
-    uint64_t           wdatawidth;
-    uint64_t           rdatawidth;
-    uint64_t           word_len;
-    uint64_t           remaining_len;
-    uint64_t           address;
-    uint64_t           addrlo;
+    uint64_t              rdata;
+    uint64_t              wdata;
+    uint64_t              wdatawidth;
+    uint64_t              rdatawidth;
+    uint64_t              word_len;
+    uint64_t              remaining_len;
+    uint64_t              address;
+    uint64_t              addrlo;
 
-    pcie_trans_mode_t  trans_mode;
-    bool               rd_lck;
-    unsigned           cmplrid;
-    unsigned           cmplcid;
-    unsigned           cmpltag;
-    unsigned           localtag;
-    unsigned           enable_auto;
+    pcie_trans_mode_t     trans_mode;
+    bool                  rd_lck;
+    unsigned              cmplrid;
+    unsigned              cmplcid;
+    unsigned              cmpltag;
+    unsigned              localtag;
+    unsigned              enable_auto;
+
+    TS_t                  ts_params;
+    int                   ts_os_count;
+    int                   os_type;
+    pcie_fc_params_t      fc_params;
+
+    uint32_t              event_count_buf[16];
 
     VRead(ENABLE_AUTO_ADDR, &enable_auto, DELTACYCLE, node);
 
@@ -351,7 +373,7 @@ void pcieVcInterface::run(void)
         {
             pcie->configurePcie(CONFIG_DISABLE_8B10B);
         }
-        
+
         // If configured, disable scrambling
         if (no_scramble_mode)
         {
@@ -377,8 +399,16 @@ void pcieVcInterface::run(void)
             // Ack transaction
             VWrite(ACKTRANS, 1, DELTACYCLE, node);
 
-            // Check if there is a new transaction (delta)
-            VRead(GETNEXTTRANS, &operation, DELTACYCLE, node);
+            // Fetch a new transaction (delta) and send idles while none available
+            do
+            {
+                VRead(GETNEXTTRANS, &operation, DELTACYCLE, node);
+                
+                if (operation == NO_TRANS_AVAIL)
+                {
+                    pcie->sendIdle();
+                }
+            } while (operation == NO_TRANS_AVAIL) ;
 
             // Make sure the tag is at a valid value
             if (tag >= MAX_TAG)
@@ -817,14 +847,11 @@ void pcieVcInterface::run(void)
                 pcie->sendIdle(int_to_model);
                 break;
 
-            case WAIT_FOR_TRANSACTION:
-
-                pcie->waitForCompletion();
-                break;
-
+            // For processing Non-TLP requests
             case EXTEND_DIRECTIVE_OP:
 
                 VRead(GETOPTIONS,    &option,       DELTACYCLE, node);
+
                 switch(option)
                 {
                 // Do PHY layer link training initialisation.
@@ -840,6 +867,166 @@ void pcieVcInterface::run(void)
                     pcie->initFc();
                     break;
 
+                // Send an ACK DLLP
+                case SEND_DLL_ACK:
+
+                    VRead(GETINTTOMODEL, &int_to_model, DELTACYCLE, node);
+                    pcie->sendAck(int_to_model);
+                    break;
+
+                // Send a NAK DLLP
+                case SEND_DLL_NAK:
+
+                    VRead(GETINTTOMODEL, &int_to_model, DELTACYCLE, node);
+
+                    pcie->sendNak(int_to_model);
+                    break;
+
+                // Send a flow control DLLP
+                case SEND_DLL_FC:
+
+                    fc_params.type         = VWrite(GETPARAMS, (uint32_t)PARAM_FC_TYPE,         DELTACYCLE, node);
+                    fc_params.vc           = VWrite(GETPARAMS, (uint32_t)PARAM_FC_VC,           DELTACYCLE, node);
+                    fc_params.hdr_credits  = VWrite(GETPARAMS, (uint32_t)PARAM_FC_HDR_CREDITS,  DELTACYCLE, node);
+                    fc_params.data_credits = VWrite(GETPARAMS, (uint32_t)PARAM_FC_DATA_CREDITS, DELTACYCLE, node);
+
+                    pcie->sendFC(fc_params.type, fc_params.vc, fc_params.hdr_credits, fc_params.data_credits);
+                    break;
+
+                // Send a power management DLLP
+                case SEND_DLL_PM:
+
+                    VRead(GETINTTOMODEL, &int_to_model, DELTACYCLE, node);
+
+                    pcie->sendPM(int_to_model);
+                    break;
+
+                // Send a Vendor DLLP without data
+                case SEND_DLL_VEND_NODATA:
+
+                    pcie->sendVendor();
+                    break;
+
+                // Send a Vendor DLLP with data
+                case SEND_DLL_VEND_DATA:
+
+                    VRead(GETINTTOMODEL, &int_to_model, DELTACYCLE, node);
+
+                    pcie->sendVendor((int)int_to_model);
+                    break;
+
+                case WAIT_FOR_DLL:
+                case TRY_DLL:
+
+                    if (option == WAIT_FOR_DLL)
+                    {
+                        // Blocking, so wait for something in the dll buffer queue
+                        while (dllbufq.empty())
+                        {
+                            pcie->sendIdle(1);
+                        }
+                    }
+                    else
+                    {
+                        if (dllbufq.empty())
+                        {
+                            VWrite(SETBOOLFROMMODEL, 0, DELTACYCLE, node);
+                        }
+                        else
+                        {
+                            VWrite(SETBOOLFROMMODEL, 1, DELTACYCLE, node);
+                        }
+                    }
+
+                    if (!dllbufq.empty())
+                    {
+                        VWrite64(SETPARAMS, (uint64_t)dllbufq.front().type     | ((uint64_t)PARAM_DLLP_TYPE         << 32), DELTACYCLE, node);
+                        VWrite64(SETPARAMS, (uint64_t)dllbufq.front().status   | ((uint64_t)PARAM_DLLP_STATUS       << 32), DELTACYCLE, node);
+                        VWrite64(SETPARAMS, (uint64_t)dllbufq.front().vc       | ((uint64_t)PARAM_DLLP_VC           << 32), DELTACYCLE, node);
+                        VWrite64(SETPARAMS, (uint64_t)dllbufq.front().hdrfc    | ((uint64_t)PARAM_DLLP_HDR_CREDITS  << 32), DELTACYCLE, node);
+                        VWrite64(SETPARAMS, (uint64_t)dllbufq.front().datafc   | ((uint64_t)PARAM_DLLP_DATA_CREDITS << 32), DELTACYCLE, node);
+                        VWrite64(SETPARAMS, (uint64_t)dllbufq.front().seqnum   | ((uint64_t)PARAM_DLLP_SEQ_NUM      << 32), DELTACYCLE, node);
+                        VWrite64(SETPARAMS, (uint64_t)dllbufq.front().venddata | ((uint64_t)PARAM_DLLP_VEND_DATA    << 32), DELTACYCLE, node);
+
+                        // Pop transaction from the queue
+                        dllbufq.pop();
+                    }
+
+                    break;
+
+                // Generate an ordered set
+                case GEN_OS:
+
+                    os_type      = VWrite(GETPARAMS, (uint32_t)PARAM_OS_TYPE,  DELTACYCLE, node);
+                    ts_os_count  = VWrite(GETPARAMS, (uint32_t)PARAM_OS_COUNT, DELTACYCLE, node);
+
+                    for (int numos = 0; numos < ts_os_count; numos++)
+                    {
+                        pcie->sendOs(os_type);
+                    }
+                    break;
+
+                // Generate a training sequence
+                case GEN_TS:
+
+                    ts_params.id       = VWrite(GETPARAMS, (uint32_t)PARAM_TS_TYPE,  DELTACYCLE, node);
+                    ts_params.linknum  = VWrite(GETPARAMS, (uint32_t)PARAM_LINK,     DELTACYCLE, node);
+                    ts_params.lanenum  = VWrite(GETPARAMS, (uint32_t)PARAM_LANE,     DELTACYCLE, node);
+                    ts_params.n_fts    = VWrite(GETPARAMS, (uint32_t)PARAM_NFTS,     DELTACYCLE, node);
+                    ts_params.datarate = VWrite(GETPARAMS, (uint32_t)PARAM_GEN,      DELTACYCLE, node);
+                    ts_params.control  = VWrite(GETPARAMS, (uint32_t)PARAM_CTL,      DELTACYCLE, node);
+
+                    ts_os_count        = VWrite(GETPARAMS, (uint32_t)PARAM_TS_COUNT, DELTACYCLE, node);
+
+                    for (int numts = 0; numts < ts_os_count; numts++)
+                    {
+                        pcie->sendTs(ts_params.id,
+                                     ts_params.linknum,
+                                     ts_params.lanenum,
+                                     ts_params.n_fts,
+                                     ts_params.control,
+                                     ts_params.datarate);
+                    }
+                    break;
+
+                // Get an OS/TS RX event count
+                case GET_EVENT:
+
+                    VRead(GETINTTOMODEL, &int_to_model, DELTACYCLE, node);
+
+                    pcie->readEventCount(int_to_model, event_count_buf);
+
+                    VWrite(SETINTFROMMODEL, link_width, DELTACYCLE, node);
+                    for (int lane = 0; lane < link_width; lane++)
+                    {
+                        VWrite(PUSHRDATA32, event_count_buf[lane], DELTACYCLE, node);
+                    }
+                    break ;
+
+                // Reset an RX event count
+                case RST_EVENT:
+
+                    VRead(GETINTTOMODEL, &int_to_model, DELTACYCLE, node);
+
+                    pcie->resetEventCount(int_to_model);
+                    break;
+
+                // Get last received training sequence data for specified lane
+                case GET_LANE_TS:
+
+                    VRead(GETINTTOMODEL, &int_to_model, DELTACYCLE, node);
+
+                    ts_params = pcie->getTS(int_to_model);
+
+                    VWrite64(SETPARAMS, ((uint64_t)ts_params.id      ) | ((uint64_t)PARAM_TS_TYPE << 32), DELTACYCLE, node);
+                    VWrite64(SETPARAMS, ((uint64_t)ts_params.linknum ) | ((uint64_t)PARAM_LINK    << 32), DELTACYCLE, node);
+                    VWrite64(SETPARAMS, ((uint64_t)ts_params.lanenum ) | ((uint64_t)PARAM_LANE    << 32), DELTACYCLE, node);
+                    VWrite64(SETPARAMS, ((uint64_t)ts_params.n_fts   ) | ((uint64_t)PARAM_NFTS    << 32), DELTACYCLE, node);
+                    VWrite64(SETPARAMS, ((uint64_t)ts_params.datarate) | ((uint64_t)PARAM_GEN     << 32), DELTACYCLE, node);
+                    VWrite64(SETPARAMS, ((uint64_t)ts_params.control ) | ((uint64_t)PARAM_CTL     << 32), DELTACYCLE, node);
+
+                    break;
+
                 default:
                     VPrint("pcieVcInterface::run : ***ERROR. Unrecognised EXTEND_DIRECTIVE_OP option (%d)\n", option);
                     error++;
@@ -848,18 +1035,20 @@ void pcieVcInterface::run(void)
 
                 break;
 
+            // For processing Incoming TLP requests
             case EXTEND_OP :
 
-               VRead(GETOPTIONS,    &option,       DELTACYCLE, node);
-               switch (option)
-               {
-               case WAIT_FOR_TRANS:
-                   // Blocking, so wait for something in the request buffer queue
-                   while (reqbufq.empty())
-                   {
-                       SendIdle(1, node);
-                   }
-                   break;
+                VRead(GETOPTIONS,    &option,       DELTACYCLE, node);
+                switch (option)
+                {
+                case WAIT_FOR_TRANS:
+                    // Blocking, so wait for something in the request buffer queue
+                    while (reqbufq.empty())
+                    {
+                        SendIdle(1, node);
+                    }
+                    break;
+
                 case TRY:
                     if (reqbufq.empty())
                     {
@@ -999,7 +1188,7 @@ void pcieVcInterface::runAutoEp()
     {
         pcie->configurePcie(CONFIG_DISABLE_8B10B);
     }
-    
+
     // If configured, disable scrambling
     if (no_scramble_mode)
     {

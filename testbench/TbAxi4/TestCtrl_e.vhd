@@ -60,10 +60,12 @@ library osvvm_cosim ;
 entity TestCtrl is
   generic (
     INT_EDGE_LEVEL    : std_logic := INTERRUPT_ON_LEVEL ;
-    INT_POLARITY      : std_logic := '1' 
+    INT_POLARITY      : std_logic := '1' ;
+    STOP_AT_TIME_ZERO : boolean   := FALSE
   ) ;
   port (
     -- Global Signal Interface
+    Clk               : In    std_logic := '0' ;
     nReset            : In    std_logic ;
 
     -- Transaction Interfaces

@@ -19,7 +19,7 @@
 --
 --  Revision History:
 --    Date      Version    Description
---    07/2025   ????.??    Updated to use CoSimIrq
+--    07/2025   2026.01    Updated to use CoSimIrq
 --    09/2022   2023.01    Initial revision
 --
 --
@@ -45,6 +45,7 @@ architecture CoSim of TestCtrl is
 --  constant BURST_MODE     : AddressBusFifoBurstModeType := ADDRESS_BUS_BURST_WORD_MODE ;
   constant BURST_MODE     : AddressBusFifoBurstModeType := ADDRESS_BUS_BURST_BYTE_MODE ;
   constant Node           : integer         := 0 ;
+  constant CycleCountType : integer         := 0 ;
 
   signal   TestDone       : integer_barrier := 1 ;
   signal   TestActive     : boolean         := TRUE ;
@@ -69,6 +70,10 @@ begin
     wait for 0 ns ;  wait for 0 ns ;
     TranscriptOpen ;  -- SetTestName done in SW
     SetTranscriptMirror(TRUE) ;
+    
+    if STOP_AT_TIME_ZERO then
+      std.env.stop;
+    end if ;
 
     -- Wait for Design Reset
     wait until nReset = '1' ;
@@ -190,6 +195,23 @@ begin
    end if ;
 
   end process ProcessIrq ;
+  
+  ------------------------------------------------------------
+  -- ProcessCycleCount
+  --   Update software cycle count with CoSimUserValue
+  ------------------------------------------------------------
+  
+  ProcessCycleCount : process (Clk)
+    variable CycleCount     : integer := 0 ;
+    variable ValueType      : integer := CycleCountType ;
+    variable NodeNum        : integer := Node ;
+  begin
+  
+    if Clk'event and Clk = '1' then
+      CycleCount := CycleCount + 1 ;
+      CoSimUserValue(ValueType, CycleCount, NodeNum) ;
+    end if ;
+  end process ProcessCycleCount ;
 
 end CoSim ;
 

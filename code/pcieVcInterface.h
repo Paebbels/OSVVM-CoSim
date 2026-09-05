@@ -14,11 +14,12 @@
 //
 //  Revision History:
 //    Date      Version    Description
+//    06/2026   2026.08    Added support for DLLP and PHY traffic processing
 //    09/2025   2026.01    Initial Version
 //
 //  This file is part of OSVVM.
 //
-//  Copyright (c) 2025 by [OSVVM Authors](../../AUTHORS.md)
+//  Copyright (c) 2025 - 2026 by [OSVVM Authors](../../AUTHORS.md)
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -162,6 +163,8 @@ public:
     static constexpr int   PUSHWDATA             =    416;
     static constexpr int   POPRDATA              =    417;
     static constexpr int   PUSHRDATA             =    418;
+    static constexpr int   PUSHRDATA32           =    419;
+    static constexpr int   POPRDATA32            =    420;
 
     static constexpr int   VCOPTIONSTART         =   1000;
     static constexpr int   ENDMODELRUN           =   VCOPTIONSTART;
@@ -185,7 +188,19 @@ public:
     // EXTEND_DIRECTIVE_OP Options
     static constexpr int   INITDLL               =      0;
     static constexpr int   INITPHY               =      1;
-
+    static constexpr int   GEN_OS                =      2;
+    static constexpr int   GEN_TS                =      3;
+    static constexpr int   GET_EVENT             =      4;
+    static constexpr int   RST_EVENT             =      5;
+    static constexpr int   GET_LANE_TS           =      6;
+    static constexpr int   SEND_DLL_ACK          =      7;
+    static constexpr int   SEND_DLL_NAK          =      8;
+    static constexpr int   SEND_DLL_FC           =      9;
+    static constexpr int   SEND_DLL_PM           =     10;
+    static constexpr int   SEND_DLL_VEND_NODATA  =     11;
+    static constexpr int   SEND_DLL_VEND_DATA    =     12;
+    static constexpr int   WAIT_FOR_DLL          =     13;
+    static constexpr int   TRY_DLL               =     14;
 
     // Internal memory endian control definitions
     static constexpr int   LITTLE_END            =      1;
@@ -225,8 +240,10 @@ public:
 
     // Burst mask definitions
     static constexpr int   BYTE_OFFSET_MASK      =    0x3;
-    
+
     static constexpr int   MAX_TAG               =    256;
+    
+    static constexpr int   NO_TRANS_AVAIL        = 0xffffffff;
 
     // -------------------------------
     // Class type definitions
@@ -246,6 +263,18 @@ public:
 
     // Completion receive data queue type
     typedef std::queue<CplDataBuf_t> CplDataBufQueue_t;
+
+    typedef struct {
+        int      status;
+        unsigned type;
+        unsigned vc;
+        unsigned hdrfc;
+        unsigned datafc;
+        unsigned seqnum;
+        unsigned venddata;
+    } DllBuf_t;
+
+    typedef std::queue<DllBuf_t> DllBufQueue_t;
 
     typedef struct {
       uint8_t  func;
@@ -291,9 +320,15 @@ public:
         uint8_t      cfg_reg;
     } ReqBuf_t;
 
+    typedef struct {
+        int          type;
+        int          hdr_credits;
+        int          data_credits;
+        int          vc;
+    } pcie_fc_params_t;
+
     // Receive request queue type
     typedef std::queue<ReqBuf_t> ReqBufQueue_t;
-
 
     // Enumerated type for different TLPs
     typedef enum pcie_trans_mode_e
@@ -347,6 +382,42 @@ public:
         PARAM_REQ_ADDRHI
     } pcie_req_params_t;
 
+    typedef enum pcie_ts_params_e
+    {
+        PARAM_TS_TYPE,
+        PARAM_LINK,
+        PARAM_LANE,
+        PARAM_NFTS,
+        PARAM_GEN,
+        PARAM_CTL,
+        PARAM_TS_COUNT
+    } pcie_ts_params_t;
+    
+    typedef enum pcie_os_params_e
+    {
+        PARAM_OS_TYPE,
+        PARAM_OS_COUNT
+    } pcie_os_params_t;
+
+    typedef enum pcie_fc_params_idx_e
+    {
+        PARAM_FC_TYPE,
+        PARAM_FC_VC,
+        PARAM_FC_HDR_CREDITS,
+        PARAM_FC_DATA_CREDITS
+    } pcie_fc_params_idx_t;
+
+    typedef enum pcie_rx_dll_param_idx_e
+    {
+        PARAM_DLLP_TYPE,
+        PARAM_DLLP_STATUS,
+        PARAM_DLLP_VC,
+        PARAM_DLLP_HDR_CREDITS,
+        PARAM_DLLP_DATA_CREDITS,
+        PARAM_DLLP_SEQ_NUM,
+        PARAM_DLLP_VEND_DATA
+    } pcie_rx_dll_param_idx__t;
+
     // -------------------------------
     // Public methods
     // -------------------------------
@@ -368,7 +439,7 @@ public:
                     endian_mode      = LITTLE_END;
                     digest_mode      = DIGEST_MODE_DISABLED;
                     no_scramble_mode = SCRAMBLING_ENABLED;
-                    
+
                     cfgspc_offset    = 0;
                     mem_addr         = 0;
                     tag              = 0;
@@ -409,7 +480,11 @@ private:
     // Queue for completion RX buffers, for use by input callback
     CplDataBufQueue_t  rxbufq;
 
+    // Queue for arriving TLP requests, for use in input callback
     ReqBufQueue_t      reqbufq;
+
+    // Queue for arriving DLLP packets,  for use by input callback
+    DllBufQueue_t      dllbufq;
 
     // -------------------------------
     // Private methods

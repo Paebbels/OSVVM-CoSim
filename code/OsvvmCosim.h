@@ -171,6 +171,8 @@ public:
 
       void     transBurstWrite               (const uint32_t addr, uint8_t  *data, const int bytesize, const int prot = 0)   {VTransBurstCommon(WRITE_BURST, BURST_NORM, addr, data, bytesize, prot, node);}
       void     transBurstWrite               (const uint64_t addr, uint8_t  *data, const int bytesize, const int prot = 0)   {VTransBurstCommon(WRITE_BURST, BURST_NORM, addr, data, bytesize, prot, node);}
+      void     transBurstWrite               (const uint32_t addr, uint32_t *data, const int bytesize, const int prot = 0)   {VTransBurstCommon(WRITE_BURST, BURST_NORM_WORD, addr, (uint8_t*)data, bytesize, prot, node);}
+      void     transBurstWrite               (const uint64_t addr, uint32_t *data, const int bytesize, const int prot = 0)   {VTransBurstCommon(WRITE_BURST, BURST_NORM_WORD, addr, (uint8_t*)data, bytesize, prot, node);}
       void     transBurstWrite               (const uint32_t addr, const int bytesize, const int prot = 0)                   {VTransBurstCommon(WRITE_BURST, BURST_TRANS, addr, NULL, bytesize, prot, node);}
       void     transBurstWrite               (const uint64_t addr, const int bytesize, const int prot = 0)                   {VTransBurstCommon(WRITE_BURST, BURST_TRANS, addr, NULL, bytesize, prot, node);}
       void     transBurstWriteAsync          (const uint32_t addr, uint8_t  *data, const int bytesize, const int prot = 0)   {VTransBurstCommon(ASYNC_WRITE_BURST, BURST_NORM, addr, data, bytesize, prot, node);}
@@ -191,6 +193,8 @@ public:
 
       void     transBurstRead                (const uint32_t addr, uint8_t  *data, const int bytesize, const int prot = 0)   {VTransBurstCommon(READ_BURST, BURST_NORM,  addr, data, bytesize, prot, node);}
       void     transBurstRead                (const uint64_t addr, uint8_t  *data, const int bytesize, const int prot = 0)   {VTransBurstCommon(READ_BURST, BURST_NORM,  addr, data, bytesize, prot, node);}
+      void     transBurstRead                (const uint32_t addr, uint32_t *data, const int bytesize, const int prot = 0)   {VTransBurstCommon(READ_BURST, BURST_NORM_WORD,  addr, (uint8_t*)data, bytesize, prot, node);}
+      void     transBurstRead                (const uint64_t addr, uint32_t *data, const int bytesize, const int prot = 0)   {VTransBurstCommon(READ_BURST, BURST_NORM_WORD,  addr, (uint8_t*)data, bytesize, prot, node);}
       void     transBurstRead                (const uint32_t addr, const int bytesize, const int prot = 0)                   {VTransBurstCommon(READ_BURST, BURST_TRANS, addr, NULL, bytesize, prot, node);}
       void     transBurstRead                (const uint64_t addr, const int bytesize, const int prot = 0)                   {VTransBurstCommon(READ_BURST, BURST_TRANS, addr, NULL, bytesize, prot, node);}
 
@@ -216,6 +220,7 @@ public:
       int      transGetReadTransactionCount  (void)                                                                          {return VTransGetCount(GET_READ_TRANSACTION_COUNT, node);}
 
       void     regInterruptCB                (pVUserInt_t func)                                                              {VRegInterrupt(func, node);}
+      void     regUserCB                     (pVUser_t    func)                                                              {VRegUserValue(func, node);}
 
       void     waitForSim                    (void)                                                                          {VWaitForSim(node);}
 

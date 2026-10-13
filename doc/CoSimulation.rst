@@ -3,11 +3,6 @@
 OSVVM's Co-simulation Framework
 ###############################
 
-.. _FRAMEWORK/CoSimulation/Overview:
-
-Overview
-********
-
 The co-simulation features of OSVVM are a complement to the Address Bus Model Independent Transactions features, as
 outlined in :ref:`[1] <MIT/AddressBus>` and the Streaming Model Independent features (see :ref:`[3] <MIT/Stream>`). It
 is highly recommended that these documents are read before this one, as it will be assumed that the reader is familiar

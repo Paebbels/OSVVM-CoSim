@@ -12,7 +12,7 @@ A typical address bus transaction test bench might look something like the diagr
 is based on the example test bench in :file:`AXI4/Axi4/testbench/TbAxi4Memory.vhd`, with the :vhdlcode:`Axi4Memory` VC
 standing in for a unit under test component.
 
-.. figure:: images/CoSimulation/Figure01.png
+.. figure:: _static/images/CoSimulation/Figure01.png
    :width: 625px
    :name: FRAMEWORK/CoSimulation/Figure1
 
@@ -54,7 +54,7 @@ The co-simulation features replace the transaction calls to :vhdlcode:`TestCtrl`
 connection to the co-simulation interface. The diagram below shows the updated framework for address bus model
 independent AXI4 manager VC.
 
-.. figure:: images/CoSimulation/Figure02.png
+.. figure:: _static/images/CoSimulation/Figure02.png
    :width: 655px
    :name: FRAMEWORK/CoSimulation/Figure2
 
@@ -72,7 +72,7 @@ A complementary setup for subordinate responses is also available. Here the co-s
 transaction calls to :vhdlcode:`TestCtrl`\ ’s :vhdlcode:`SubordinateProc` with a connection to the co-simulation
 interface. The diagram below shows the updated framework for address bus model independent AXI4 subordinate VC.
 
-.. figure:: images/CoSimulation/Figure03.png
+.. figure:: _static/images/CoSimulation/Figure03.png
    :width: 722px
    :name: FRAMEWORK/CoSimulation/Figure3
 
@@ -91,7 +91,7 @@ there via the API as appropriate.
 A similar setup is found for the stream model independent setup. The diagram below shows an example test setup using the
 xMii MAC VC for Ethernet (with a setup for the xMii PHY VC being very similar):
 
-.. figure:: images/CoSimulation/Figure04.png
+.. figure:: _static/images/CoSimulation/Figure04.png
    :width: 577px
    :name: FRAMEWORK/CoSimulation/Figure4
 
@@ -1734,7 +1734,7 @@ means to register a callback function to be called whenever the processor does a
 function can choose to process the access or hand it back to the ISS. The model can also be connected to a gdb debugger
 as a remote target over TCP/IP and thus an IDE such as Eclipse. The test environment now looks like the following:
 
-.. figure:: images/CoSimulation/Figure08.png
+.. figure:: _static/images/CoSimulation/Figure08.png
    :width: 707px
    :name: FRAMEWORK/CoSimulation/Figure8
 
@@ -1858,7 +1858,7 @@ advancement or interrupts, but this is easily added by extending the class to en
 transfers, time, and interrupt support. It serves as a demonstration and, of course, a user can write their own socket
 code. The test environment now looks like that shown in the figure below:
 
-.. figure:: images/CoSimulation/Figure11.png
+.. figure:: _static/images/CoSimulation/Figure11.png
    :width: 689px
    :name: FRAMEWORK/CoSimulation/Figure11
 
@@ -1918,7 +1918,7 @@ in the previous examples), and the interrupt process uses node 1. Each node will
 functions—:cppcode:`VUserMain0` and :cppcode:`VUserMain1`—each running as separate programs. This arrangement is shown
 in the diagram below.
 
-.. figure:: images/CoSimulation/Figure13.png
+.. figure:: _static/images/CoSimulation/Figure13.png
    :width: 758px
    :name: FRAMEWORK/CoSimulation/Figure13
 
@@ -1952,7 +1952,7 @@ for, flagging a pass/fail condition.
 
 This setup is shown in the diagram below:
 
-.. figure:: images/CoSimulation/Figure14.png
+.. figure:: _static/images/CoSimulation/Figure14.png
    :width: 740px
    :name: FRAMEWORK/CoSimulation/Figure14
 
@@ -2007,7 +2007,7 @@ Therefore this must be run in a separate thread. Once started, and the simulatio
 code, the user code can then make calls to the co-simulation API, via an :cppcode:`OsvvmCosim` class. The diagram below
 summarises this environment
 
-.. figure:: images/CoSimulation/Figure15.png
+.. figure:: _static/images/CoSimulation/Figure15.png
    :width: 675px
    :name: FRAMEWORK/CoSimulation/Figure15
 
